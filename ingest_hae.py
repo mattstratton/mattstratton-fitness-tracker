@@ -95,6 +95,16 @@ def upsert_body_metric(conn, metric_name: str, units: str, points: list) -> int:
     return n
 
 
+def _span_hours(start: str | None, end: str | None) -> float | None:
+    if not start or not end:
+        return None
+    fmt = "%Y-%m-%d %H:%M:%S %z"
+    try:
+        return (datetime.strptime(end, fmt) - datetime.strptime(start, fmt)).total_seconds() / 3600.0
+    except ValueError:
+        return None
+
+
 def upsert_sleep(conn, units: str, points: list) -> int:
     to_minutes = {"hr": 60.0, "min": 1.0}.get(units, 60.0)
     n = 0
@@ -103,7 +113,7 @@ def upsert_sleep(conn, units: str, points: list) -> int:
         if date is None:
             continue
         asleep = p.get("asleep") or p.get("totalSleep")
-        in_bed = p.get("inBed") or p.get("inBedTime")
+        in_bed = p.get("inBed") or p.get("inBedTime") or _span_hours(p.get("inBedStart"), p.get("inBedEnd"))
         stages = {k: v for k, v in p.items()
                   if k in ("core", "deep", "rem", "awake") and v is not None}
         conn.execute(
