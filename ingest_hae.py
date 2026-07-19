@@ -129,6 +129,8 @@ def upsert_workouts(conn, workouts: list) -> int:
             energy = energy.get("qty")
         if isinstance(duration, dict):
             duration = duration.get("qty")
+        if duration is not None:
+            duration = duration / 60.0  # HAE reports seconds
         conn.execute(
             "INSERT INTO workouts (id, start_ts, end_ts, type, duration_min, energy_kcal) "
             "VALUES (?, ?, ?, ?, ?, ?) "

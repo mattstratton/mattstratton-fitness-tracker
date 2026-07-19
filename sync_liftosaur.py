@@ -20,6 +20,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 from lib import KG_TO_LBS, fail, get_db, load_env, log_sync
 
@@ -64,7 +65,13 @@ def parse_record(record: dict) -> list[tuple]:
     text = record["text"]
     record_id = record["id"]
     header, _, body = text.partition("exercises:")
-    date = text[:10]
+    # Timestamps arrive as UTC ("2026-07-17 00:20:20 +00:00"); store the LOCAL
+    # date so evening sessions land on the same day as nutrition/activity data.
+    try:
+        ts = datetime.strptime(header.split(" / ")[0].strip(), "%Y-%m-%d %H:%M:%S %z")
+        date = ts.astimezone().strftime("%Y-%m-%d")
+    except ValueError:
+        date = text[:10]
     program = (HEADER_RE["program"].search(header) or [None, None])[1]
     day_name = (HEADER_RE["day_name"].search(header) or [None, None])[1]
 
