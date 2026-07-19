@@ -15,15 +15,14 @@
          gets around to exporting), plus once daily for the Liftosaur pull. -->
     <key>WatchPaths</key>
     <array>
+        <string>/Users/mattstratton/Library/Mobile Documents/com~apple~CloudDocs/AutoExport</string>
         <string>/Users/mattstratton/Library/Mobile Documents/com~apple~CloudDocs/HealthExport</string>
     </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>12</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
+    <!-- WatchPaths is not recursive, so it can miss files created inside
+         AutoExport/{automation_name}/ subfolders; the hourly timer is the
+         reliable backstop (sync is a no-op when nothing is new). -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
     <key>ThrottleInterval</key>
     <integer>300</integer>
     <key>StandardOutPath</key>

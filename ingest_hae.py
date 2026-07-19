@@ -16,7 +16,10 @@ from pathlib import Path
 
 from lib import KG_TO_LBS, fail, get_db, last_ok_run, load_env, log_sync
 
-DEFAULT_EXPORT_DIR = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/HealthExport"
+# Automations write to AutoExport/{automation_name}/; manual exports to wherever
+# you point them (HealthExport by convention). Scan both, recursively.
+ICLOUD = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs"
+DEFAULT_EXPORT_DIRS = [ICLOUD / "AutoExport", ICLOUD / "HealthExport"]
 
 # HAE metric name -> (table, column). Weight/fat handled separately.
 NUTRITION_METRICS = {
@@ -167,16 +170,20 @@ def ingest_file(conn, path: Path) -> tuple[int, list]:
 
 def main():
     env = load_env()
-    export_dir = Path(env.get("HAE_EXPORT_DIR", str(DEFAULT_EXPORT_DIR))).expanduser()
+    if "HAE_EXPORT_DIR" in env:
+        export_dirs = [Path(env["HAE_EXPORT_DIR"]).expanduser()]
+    else:
+        export_dirs = DEFAULT_EXPORT_DIRS
+    export_dirs = [d for d in export_dirs if d.is_dir()]
     force = "--force" in sys.argv
-    if not export_dir.is_dir():
-        fail("hae", f"export dir not found: {export_dir}")
+    if not export_dirs:
+        fail("hae", "no export dir found (looked for AutoExport/HealthExport in iCloud)")
 
     conn = get_db()
     since = None if force else last_ok_run(conn, "hae")
 
     files, total_rows, all_unknown, errors = 0, 0, set(), []
-    for path in sorted(export_dir.rglob("*.json")):
+    for path in sorted(p for d in export_dirs for p in d.rglob("*.json")):
         mtime = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
         if since and mtime <= since:
             continue
