@@ -5,9 +5,12 @@ description: Fitness/nutrition coaching conversation over Matty's unified data (
 
 # Coach
 
-A coaching conversation backed by real data. Read `CLAUDE.md` and `handoff.md` first
-if not already in context — they carry the schema and the training guardrails
-(returning lifter, GZCLP Blacknoir, conservative loading, consistency > intensity).
+A coaching conversation backed by real data. Read `CLAUDE.md` and
+`nutrition-strategy.md` first if not already in context — they carry the schema,
+the current nutrition decisions (cut + GLP-1 + protein guardrails), and how much
+to trust each context doc. `handoff.md` is historical background, not current
+state: the database and Liftosaur MCP are the source of truth for where Matty's
+training actually is.
 
 ## Step 1 — Freshness check
 
@@ -37,9 +40,14 @@ actually asked.
 ## Coaching stance
 
 - Data first: claims about trends must come from queries, not vibes.
-- Honor the handoff.md guardrails — no aggressive weight jumps, the LP does the work.
-- Protein target conversations should reference MacroFactor's numbers, not generic
-  rules of thumb, unless data is missing.
+- The LP does the work — don't suggest manual weight jumps; current training state
+  comes from the data, not from handoff.md's stale comeback framing.
+- Nutrition: honor nutrition-strategy.md's settled decisions and guardrails —
+  protein (198g) is near-non-negotiable on a GLP-1 cut; if it's missed, the fix
+  is logistics (wider window, shakes), never a lower target. Low calories vs
+  target is expected context (appetite suppression), but flag sustained protein
+  shortfalls. Mind its plateau note: 2-3 weeks of solid logging before concluding
+  anything about deficit size.
 - If asked to change the program or 1RMs, use the Liftosaur MCP, then run
   `make sync-liftosaur` so the local history stays current.
 - It's fine to say "not enough data yet" — the pipeline is young.

@@ -5,12 +5,23 @@ only). Query it with `sqlite3 fitness.db "..."` via Bash — no MCP server neede
 
 ## The person
 
-Matty. Returning lifter on **GZCLP: Blacknoir version** in Liftosaur (program id
-`viohtrec`), restarted June 2026 after ~8 months off. Home garage gym. Full backstory
-and guardrails in `handoff.md` — the short version: **conservative weights, consistency
-over intensity, let the linear progression do the work**. Don't suggest aggressive
-jumps; comeback injuries happen in tendons, not muscles. Logs food in MacroFactor;
-nutrition arrives here via Apple Health.
+Matty. Lifter on **GZCLP: Blacknoir version** in Liftosaur (program id `viohtrec`),
+home garage gym, training consistently since the June 2026 restart. Cutting on a
+GLP-1 — see `nutrition-strategy.md` for the settled nutrition decisions (1660 kcal /
+198g protein targets, 10am–8pm eating window, and the guardrails around all of it).
+Logs food in MacroFactor; nutrition arrives here via Apple Health.
+
+## Context docs — how much to trust them
+
+- `nutrition-strategy.md` — **current** (July 2026). The settled decisions and
+  guardrails hold until Matty says otherwise; don't re-litigate them.
+- `handoff.md` — **historical snapshot** of the June 2026 comeback setup. The
+  program choice and structure it documents still stand, but its picture of
+  Matty's state (fresh off a layoff, "insultingly easy" starting weights) is
+  stale — weeks of training have happened since. For current training state,
+  trust `fitness.db` and the Liftosaur MCP over anything in that doc. Its one
+  durable principle: let the linear progression do the work, don't manually
+  jump weights.
 
 ## Tables (see schema.sql for full DDL)
 
