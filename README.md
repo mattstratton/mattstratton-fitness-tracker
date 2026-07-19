@@ -23,6 +23,13 @@ Liftosaur REST API ──► sync_liftosaur.py    ingest_hae.py
 1. **Phone**: MacroFactor → enable Apple Health write. Install Health Auto Export
    (premium), schedule a daily JSON export of nutrition, weight, sleep, steps, and
    workouts to iCloud Drive folder `HealthExport`.
+
+   ⚠️ iOS only allows health data access while the phone is **unlocked**, and
+   background automations run at iOS's whim. Make exports reliable with an iOS
+   Shortcuts personal automation ("When I first unlock my iPhone after 6 AM →
+   Run Automation" via HAE's Shortcuts action) and/or the HAE Automations widget
+   on the home screen. The Mac side doesn't care *when* the export happens —
+   launchd watches the iCloud folder and ingests whenever a file lands.
 2. **Secrets**: create `.env` (gitignored) in this directory:
 
    ```
