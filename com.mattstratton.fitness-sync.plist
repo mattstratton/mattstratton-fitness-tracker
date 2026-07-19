@@ -15,7 +15,8 @@
          gets around to exporting), plus once daily for the Liftosaur pull. -->
     <key>WatchPaths</key>
     <array>
-        <string>/Users/mattstratton/Library/Mobile Documents/com~apple~CloudDocs/AutoExport</string>
+        <string>/Users/mattstratton/Library/Mobile Documents/iCloud~com~ifunography~HealthExport/Documents/HealthMetrics</string>
+        <string>/Users/mattstratton/Library/Mobile Documents/iCloud~com~ifunography~HealthExport/Documents/Workouts</string>
         <string>/Users/mattstratton/Library/Mobile Documents/com~apple~CloudDocs/HealthExport</string>
     </array>
     <!-- WatchPaths is not recursive, so it can miss files created inside

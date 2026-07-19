@@ -16,10 +16,14 @@ from pathlib import Path
 
 from lib import KG_TO_LBS, fail, get_db, last_ok_run, load_env, log_sync
 
-# Automations write to AutoExport/{automation_name}/; manual exports to wherever
-# you point them (HealthExport by convention). Scan both, recursively.
-ICLOUD = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs"
-DEFAULT_EXPORT_DIRS = [ICLOUD / "AutoExport", ICLOUD / "HealthExport"]
+# Automations write into HAE's own iCloud container (shown as the app's folder
+# in Files); manual exports go to iCloud Drive proper. Scan both, recursively —
+# non-export JSONs (automation configs) parse to zero rows and are harmless.
+ICLOUD = Path.home() / "Library/Mobile Documents"
+DEFAULT_EXPORT_DIRS = [
+    ICLOUD / "iCloud~com~ifunography~HealthExport/Documents",
+    ICLOUD / "com~apple~CloudDocs/HealthExport",
+]
 
 # HAE metric name -> (table, column). Weight/fat handled separately.
 NUTRITION_METRICS = {
@@ -125,7 +129,9 @@ def upsert_workouts(conn, workouts: list) -> int:
         wtype = w.get("name") or w.get("workoutName") or "Unknown"
         if not start:
             continue
-        wid = w.get("id") or f"{start}|{wtype}"
+        # HAE writes each automation's output to two folders, and only some
+        # variants carry an id — key on start|type so duplicates collapse.
+        wid = f"{start}|{wtype}"
         duration = w.get("duration")
         energy = w.get("activeEnergyBurned")
         if isinstance(energy, dict):
@@ -150,7 +156,11 @@ def ingest_file(conn, path: Path) -> tuple[int, list]:
     data = payload.get("data", payload)
     rows = 0
     unknown = []
+    if not isinstance(data, dict):
+        return 0, []
     for metric in data.get("metrics", []):
+        if not isinstance(metric, dict):
+            continue  # automation config files list metric names as strings
         name = metric.get("name", "")
         units = metric.get("units", "")
         points = metric.get("data", [])
@@ -164,7 +174,8 @@ def ingest_file(conn, path: Path) -> tuple[int, list]:
             rows += upsert_sleep(conn, units, points)
         else:
             unknown.append(name)
-    rows += upsert_workouts(conn, data.get("workouts", []))
+    workouts = [w for w in data.get("workouts", []) if isinstance(w, dict)]
+    rows += upsert_workouts(conn, workouts)
     return rows, unknown
 
 
@@ -192,7 +203,7 @@ def main():
             total_rows += rows
             all_unknown.update(unknown)
             files += 1
-        except (json.JSONDecodeError, OSError) as e:
+        except Exception as e:
             errors.append(f"{path.name}: {e}")
 
     conn.commit()
