@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Health data never goes to GitHub, even a private repo
+fitness.db
+fitness.db-wal
+fitness.db-shm
+exports/
+dropbox/
+*.log
+logs/
+
+# OS noise
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
