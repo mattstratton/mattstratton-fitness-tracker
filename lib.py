@@ -49,15 +49,6 @@ def log_sync(conn, source: str, files: int, rows: int, status: str, message: str
     conn.commit()
 
 
-def last_ok_run(conn, source: str):
-    row = conn.execute(
-        "SELECT run_ts FROM sync_log WHERE source = ? AND status = 'ok' "
-        "ORDER BY run_ts DESC LIMIT 1",
-        (source,),
-    ).fetchone()
-    return row[0] if row else None
-
-
 def fail(source: str, message: str):
     try:
         conn = get_db()

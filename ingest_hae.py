@@ -5,16 +5,18 @@ HAE payload format (github.com/Lybron/health-auto-export):
   {"data": {"metrics": [{"name", "units", "data": [{"date", "qty", ...}]}],
             "workouts": [{"name"/"workoutName", "start", "end", ...}]}}
 Some file exports omit the top-level "data" wrapper; both shapes are handled.
-Re-runs are safe: everything is an upsert on natural keys, and files are
-re-parsed only if modified since the last successful run.
+Re-runs are safe: everything is an upsert on natural keys, so every file is
+re-parsed on every run. HAE rewrites its rolling weekly export in place, and
+iCloud file mtimes don't reliably reflect when new content actually landed
+locally — an mtime-based "only parse what changed" cursor silently missed
+same-day updates to that file, so we don't try to be clever here.
 """
 
 import json
-import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-from lib import KG_TO_LBS, fail, get_db, last_ok_run, load_env, log_sync
+from lib import KG_TO_LBS, fail, get_db, load_env, log_sync
 
 # Automations write into HAE's own iCloud container (shown as the app's folder
 # in Files); manual exports go to iCloud Drive proper. Scan both, recursively —
@@ -196,18 +198,13 @@ def main():
     else:
         export_dirs = DEFAULT_EXPORT_DIRS
     export_dirs = [d for d in export_dirs if d.is_dir()]
-    force = "--force" in sys.argv
     if not export_dirs:
         fail("hae", "no export dir found (looked for AutoExport/HealthExport in iCloud)")
 
     conn = get_db()
-    since = None if force else last_ok_run(conn, "hae")
 
     files, total_rows, all_unknown, errors = 0, 0, set(), []
     for path in sorted(p for d in export_dirs for p in d.rglob("*.json")):
-        mtime = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
-        if since and mtime <= since:
-            continue
         try:
             rows, unknown = ingest_file(conn, path)
             total_rows += rows
