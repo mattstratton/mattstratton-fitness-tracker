@@ -114,7 +114,10 @@ def upsert_sleep(conn, units: str, points: list) -> int:
         date = metric_date(p)
         if date is None:
             continue
-        asleep = p.get("asleep") or p.get("totalSleep")
+        # totalSleep is the real nightly total; "asleep" appears to track only
+        # a generic/unspecified sleep sub-stage and has been unreliable (0 on
+        # some nights, a small bogus nonzero on others) - prefer totalSleep.
+        asleep = p.get("totalSleep") if p.get("totalSleep") is not None else p.get("asleep")
         in_bed = p.get("inBed") or p.get("inBedTime") or _span_hours(p.get("inBedStart"), p.get("inBedEnd"))
         stages = {k: v for k, v in p.items()
                   if k in ("core", "deep", "rem", "awake") and v is not None}
@@ -203,8 +206,15 @@ def main():
 
     conn = get_db()
 
+    # Each automation writes to two folders (scheduled + manual-sync-triggered),
+    # and either can be the more current one on a given day. Process oldest to
+    # newest by mtime so whichever file actually has the freshest data is the
+    # last upsert and wins the ON CONFLICT — not whichever path sorts last
+    # alphabetically, which is arbitrary and previously let a stale duplicate
+    # silently overwrite a same-day value that had already been correctly synced.
     files, total_rows, all_unknown, errors = 0, 0, set(), []
-    for path in sorted(p for d in export_dirs for p in d.rglob("*.json")):
+    all_paths = [p for d in export_dirs for p in d.rglob("*.json")]
+    for path in sorted(all_paths, key=lambda p: p.stat().st_mtime):
         try:
             rows, unknown = ingest_file(conn, path)
             total_rows += rows
