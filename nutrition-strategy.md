@@ -1,6 +1,6 @@
 # Nutrition & IF Strategy — Context for Claude Code
 
-Companion to `handoff.md` (which covers the GZCLP program setup). This one covers
+Companion to `training-strategy.md` (which covers the GZCLP program setup). This one covers
 the MacroFactor / intermittent fasting side, decided July 2026. Feed this into
 `fitness.db`-aware conversations (`/coach`) so nutrition questions have the same
 "don't re-litigate the settled stuff" grounding the lifting side already has.
@@ -18,7 +18,7 @@ the MacroFactor / intermittent fasting side, decided July 2026. Feed this into
   to actually logging in MacroFactor daily. The recent apparent weight-loss
   plateau is more likely an under-logging artifact than a true metabolic
   plateau — see Plateau note below.
-- Lifting GZCLP (per `handoff.md`), training days vary — usually evening (6-7pm),
+- Lifting GZCLP (per `training-strategy.md`), training days vary — usually evening (6-7pm),
   occasionally morning, schedule isn't fixed.
 
 ## Decisions already made (do not re-litigate)

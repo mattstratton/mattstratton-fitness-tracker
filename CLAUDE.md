@@ -15,13 +15,17 @@ Logs food in MacroFactor; nutrition arrives here via Apple Health.
 
 - `nutrition-strategy.md` — **current** (July 2026). The settled decisions and
   guardrails hold until Matty says otherwise; don't re-litigate them.
-- `handoff.md` — **historical snapshot** of the June 2026 comeback setup. The
-  program choice and structure it documents still stand, but its picture of
-  Matty's state (fresh off a layoff, "insultingly easy" starting weights) is
-  stale — weeks of training have happened since. For current training state,
-  trust `fitness.db` and the Liftosaur MCP over anything in that doc. Its one
-  durable principle: let the linear progression do the work, don't manually
-  jump weights.
+- `nutrition-tactics.md` — **living notes**, not settled decisions. Practical
+  food/prep tips and patterns noticed from the logs (protein-dense options, what
+  actually separates good vs. bad protein days). Update it freely as we learn
+  more — unlike `nutrition-strategy.md`, nothing in here is locked.
+- `training-strategy.md` — the program decision (GZCLP: Blacknoir, program id
+  `viohtrec`, templates/increments) plus the durable guiding principle: let the
+  linear progression do the work, don't manually jump weights. Trimmed down from
+  the original June 2026 comeback handoff doc once its one-time setup work
+  (fixing inflated starting 1RMs) was done. For current training state — what's
+  next, current weights, T3 exercise selection — trust `fitness.db` and the
+  Liftosaur MCP over this doc; it won't track that.
 
 ## Tables (see schema.sql for full DDL)
 

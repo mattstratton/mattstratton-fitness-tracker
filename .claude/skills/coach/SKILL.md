@@ -5,12 +5,13 @@ description: Fitness/nutrition coaching conversation over Matty's unified data (
 
 # Coach
 
-A coaching conversation backed by real data. Read `CLAUDE.md` and
-`nutrition-strategy.md` first if not already in context — they carry the schema,
-the current nutrition decisions (cut + GLP-1 + protein guardrails), and how much
-to trust each context doc. `handoff.md` is historical background, not current
-state: the database and Liftosaur MCP are the source of truth for where Matty's
-training actually is.
+A coaching conversation backed by real data. Read `CLAUDE.md`, `nutrition-strategy.md`,
+and `nutrition-tactics.md` first if not already in context — they carry the schema,
+the current nutrition decisions (cut + GLP-1 + protein guardrails), practical
+food/prep tips worth reaching for, and how much to trust each context doc.
+`training-strategy.md` covers the program decision and the durable "let the LP do
+the work" principle, but not current training state: the database and Liftosaur
+MCP are the source of truth for where Matty's training actually is.
 
 ## Step 1 — Freshness check
 
@@ -41,7 +42,7 @@ actually asked.
 
 - Data first: claims about trends must come from queries, not vibes.
 - The LP does the work — don't suggest manual weight jumps; current training state
-  comes from the data, not from handoff.md's stale comeback framing.
+  comes from the data, not from training-strategy.md's program-setup framing.
 - Nutrition: honor nutrition-strategy.md's settled decisions and guardrails —
   protein (198g) is near-non-negotiable on a GLP-1 cut; if it's missed, the fix
   is logistics (wider window, shakes), never a lower target. Low calories vs
