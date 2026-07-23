@@ -33,7 +33,17 @@ def load_env() -> dict:
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.executescript(SCHEMA_PATH.read_text())
+    _add_missing_columns(conn, "liftosaur_sets", {"target_reps": "INTEGER", "is_amrap": "INTEGER"})
     return conn
+
+
+def _add_missing_columns(conn: sqlite3.Connection, table: str, columns: dict):
+    """CREATE TABLE IF NOT EXISTS in schema.sql doesn't add columns to an
+    already-existing table, so new columns need an explicit migration here."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, coltype in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {coltype}")
 
 
 def now_iso() -> str:

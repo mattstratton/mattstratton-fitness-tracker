@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS liftosaur_sets (
     weight_lbs   REAL,
     is_completed INTEGER,                  -- 0/1
     tier         TEXT,                     -- T1/T2/T3 when derivable, else NULL
+    target_reps  INTEGER,                  -- prescribed reps for this set, from Liftosaur's target: segment
+    is_amrap     INTEGER,                  -- 0/1, whether target_reps was an AMRAP ("5+") set
     PRIMARY KEY (record_id, exercise, set_index)
 );
 

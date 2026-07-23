@@ -10,8 +10,10 @@ Records arrive in Liftohistory text format, e.g.:
   }
 
 Each performed set group (NxR WEIGHT) expands to N rows in liftosaur_sets.
-Warmup and target segments are ignored. Idempotent: PK (record_id, exercise, set_index),
-and each record's sets are deleted before re-insert so edits in Liftosaur propagate.
+Warmup segments are ignored; target segments are parsed for target_reps/is_amrap
+so a low-but-nonzero rep count (e.g. missing an AMRAP target) can be told apart
+from a full success. Idempotent: PK (record_id, exercise, set_index), and each
+record's sets are deleted before re-insert so edits in Liftosaur propagate.
 """
 
 import json
@@ -32,6 +34,11 @@ HEADER_RE = {
 }
 # e.g. "3x5 215lb", "1x13 88.75lb", "2x5 60kg @8", "3x12" (bodyweight)
 SET_GROUP_RE = re.compile(r"(\d+)x(\d+)(?:\s+([\d.]+)\s*(lb|kg))?(?:\s+@[\d.]+)?$")
+# same shape as SET_GROUP_RE but reps may carry a trailing "+" for AMRAP, e.g. "1x5+ 215lb",
+# and a rest-timer suffix like "90s" (seen on T3 accessory targets) may follow the weight
+TARGET_GROUP_RE = re.compile(
+    r"(\d+)x(\d+)(\+)?(?:\s+([\d.]+)\s*(lb|kg))?(?:\s+@[\d.]+)?(?:\s+\d+s)?$"
+)
 
 
 def fetch_page(api_key: str, cursor=None) -> dict:
@@ -57,6 +64,18 @@ def parse_sets(segment: str) -> list[tuple[int, float | None]]:
         if weight is not None and m.group(4) == "kg":
             weight *= KG_TO_LBS
         sets.extend([(reps, weight)] * count)
+    return sets
+
+
+def parse_target(segment: str) -> list[tuple[int, bool]]:
+    """'2x5 215lb, 1x5+ 215lb' -> [(5, False), (5, False), (5, True)]"""
+    sets = []
+    for group in segment.split(","):
+        m = TARGET_GROUP_RE.match(group.strip())
+        if not m:
+            continue
+        count, reps, is_amrap = int(m.group(1)), int(m.group(2)), m.group(3) == "+"
+        sets.extend([(reps, is_amrap)] * count)
     return sets
 
 
@@ -86,10 +105,16 @@ def parse_record(record: dict) -> list[tuple]:
         )
         if performed is None:
             continue
+        target_segment = next(
+            (s for s in segments[1:] if s.startswith("target:")), None
+        )
+        targets = parse_target(target_segment.partition(":")[2]) if target_segment else []
         for i, (reps, weight) in enumerate(parse_sets(performed)):
+            target_reps, is_amrap = targets[i] if i < len(targets) else (None, None)
             rows.append(
                 (record_id, date, program, day_name, exercise, i,
-                 reps, weight, 1 if reps > 0 else 0, None)
+                 reps, weight, 1 if reps > 0 else 0, None,
+                 target_reps, None if is_amrap is None else (1 if is_amrap else 0))
             )
     return rows
 
@@ -111,8 +136,9 @@ def main():
                 conn.execute("DELETE FROM liftosaur_sets WHERE record_id = ?", (record["id"],))
                 conn.executemany(
                     "INSERT INTO liftosaur_sets (record_id, date, program, day_name, "
-                    "exercise, set_index, reps, weight_lbs, is_completed, tier) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "exercise, set_index, reps, weight_lbs, is_completed, tier, "
+                    "target_reps, is_amrap) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     rows,
                 )
                 total_rows += len(rows)
