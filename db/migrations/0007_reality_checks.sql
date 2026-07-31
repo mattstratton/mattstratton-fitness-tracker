@@ -13,15 +13,24 @@
 -- 6am when an agent reads the number and reports it as fact, which is exactly
 -- how the sleep-stage unit bug survived: documented, and wrong.
 
--- Weight readings that disagree with their own neighbourhood. A 343.5 lb
--- reading sits in 2021 against a ~285 baseline -- a bad smart-scale reading, or
--- someone else standing on it. Not a parsing fault (unit_anomalies is clean),
--- but it will wreck any trend fit that includes it.
+-- Weight readings that disagree with their own neighbourhood.
+--
+-- One exists in ten years: 343.5 lb on 2021-11-30, between scale readings of
+-- 316.8 and 302.1. Its recorded_by is 'MyFitnessPal' alone while every reading
+-- around it is 'MyFitnessPal | Withings' -- so it never came off the scale, it
+-- was typed in. A hand-entered typo, not a body doing something impossible
+-- (41 lb in ten days). Nothing was wrong with the parsing; the field that
+-- explained it was simply being discarded.
 CREATE VIEW weight_outliers AS
 SELECT w.observed_on,
        ROUND(w.value::numeric, 1)         AS value_lb,
        ROUND(m.local_median::numeric, 1)  AS local_median_lb,
-       ROUND((100 * (w.value - m.local_median) / m.local_median)::numeric, 1) AS pct_off
+       ROUND((100 * (w.value - m.local_median) / m.local_median)::numeric, 1) AS pct_off,
+       w.recorded_by,
+       -- A reading with no scale in its provenance was typed in by hand. Not
+       -- automatically wrong -- everything before 2018 is manual, because there
+       -- was no scale yet -- but it is how the one real outlier got in.
+       (w.recorded_by IS NULL OR w.recorded_by NOT ILIKE '%withings%') AS hand_entered
 FROM observations_daily w
 CROSS JOIN LATERAL (
     -- Median of everything within three weeks either side, so a single bad

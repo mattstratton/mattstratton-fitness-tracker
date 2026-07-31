@@ -224,9 +224,47 @@ app holds 182 of them.
    measurement. Good post material: the metric I was most excited to finally store turned
    out to need a caveat the moment it met reality. MacroFactor's own expenditure figure,
    derived from weight trend vs logged intake, is far better calibrated.
-2. **A 343.5 lb reading in 2021** against a 280–300 baseline. Bad smart-scale reading or
-   another person on it. `unit_anomalies` is clean, so this is data quality rather than
-   parsing — but any naive min/max or trend query will pick it up.
+2. **A 343.5 lb reading in 2021** against a 280–300 baseline — and chasing it down was the
+   best thing that happened to the schema. See below.
+
+## The outlier that found a missing column
+
+Probably the best single anecdote in here, because it went through three wrong answers.
+
+A `weight_outliers` view flagged one reading in ten years: **343.5 lb on 2021-11-30**,
+12.8% above its own three-week median. First guess: a smart scale mis-assigning a reading
+to the wrong household profile. Matty ruled that out — and raised the genuinely
+uncomfortable possibility that it was simply true.
+
+Looking at the surrounding data made it stranger. Late 2021 weigh-ins were 11–27 days
+apart with deltas of **+14.6, −23.8, +10.2, +26.7, −41.4 lb**. From December, once
+weigh-ins became near-daily, deltas settled to ±1–5. So it wasn't one bad reading — the
+whole sparse stretch looked impossible. Nobody loses 41 lb in ten days.
+
+The answer was in a field the parser was throwing away. Every HAE data point carries a
+`source`: the device or app that recorded it. And:
+
+```
+2021-11-19  316.8  MyFitnessPal | Withings
+2021-11-30  343.5  MyFitnessPal              <- no scale
+2021-12-10  302.1  MyFitnessPal | Withings
+```
+
+**It was typed in by hand.** Every reading around it came off the Withings scale; that one
+didn't. A typo, not a body.
+
+Three lessons, all of which belong in the post:
+
+1. **Provenance is data, not decoration.** The column I hadn't bothered to store was the
+   only one that could answer the question. It's now `observations.recorded_by`, distinct
+   from `source` (which records how a Report reached us, not what recorded it).
+2. **The first three explanations were all wrong** — wrong scale profile, wrong person,
+   genuinely his weight — and each was plausible. The data settled it; speculation
+   wouldn't have.
+3. **It's an accidental ten-year archaeology of tracking apps.** 27 distinct source
+   strings: MyFitnessPal, Withings, Noom, Simple, StrongLifts, Strong, Hevy, Glyppo,
+   Progress, MacroFactor, Liftosaur. Only 30 of 683 weigh-ins were ever hand-entered, and
+   nearly all of those predate owning a scale.
 
 ## Numbers to re-measure before publishing
 

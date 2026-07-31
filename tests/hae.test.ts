@@ -18,7 +18,7 @@ test('renames known metrics to canonical names and units', () => {
     },
   })
   assert.deepEqual(out, [
-    { observedOn: '2026-07-30', metric: 'calories', value: 1660, unit: 'kcal', source: 'hae', reportedAt: REPORTED_AT },
+    { observedOn: '2026-07-30', metric: 'calories', value: 1660, unit: 'kcal', recordedBy: null, source: 'hae', reportedAt: REPORTED_AT },
   ])
 })
 
@@ -174,4 +174,20 @@ test('deduplicates workouts sharing a natural key within one payload', () => {
   )
   assert.equal(workouts.length, 2)
   assert.equal(workouts.find((w) => w.type === 'Yoga')!.energyKcal, 111)
+})
+
+test('captures the device or app that recorded a value', () => {
+  // The field the first schema discarded -- and the one that explained a 343.5
+  // lb weigh-in typed into MyFitnessPal between two Withings scale readings.
+  const out = obs({
+    data: {
+      metrics: [
+        { name: 'weight_body_mass', units: 'lb', data: [
+          { date: '2021-11-30 00:00:00 -0600', qty: 343.5, source: 'MyFitnessPal' },
+          { date: '2021-12-10 00:00:00 -0600', qty: 302.1, source: 'MyFitnessPal | Withings' },
+        ] },
+      ],
+    },
+  })
+  assert.deepEqual(out.map((o) => o.recordedBy), ['MyFitnessPal', 'MyFitnessPal | Withings'])
 })

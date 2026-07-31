@@ -20,7 +20,15 @@ CREATE TABLE observations (
     metric       text             NOT NULL,
     value        double precision NOT NULL,
     unit         text             NOT NULL,
+    -- How the Report reached us. NOT the same thing as recorded_by.
     source       text             NOT NULL,
+    -- What actually recorded the value: 'Withings', 'MyFitnessPal | Withings',
+    -- 'Matthew's Apple Watch'. HAE supplies this per point and the first
+    -- version of this schema threw it away -- which turned out to be the field
+    -- that explained a 343.5 lb weigh-in sitting between scale readings of
+    -- 316.8 and 302.1. It was hand-typed into MyFitnessPal; every reading
+    -- around it came off the scale. Provenance is not decoration.
+    recorded_by  text,
     reported_at  timestamptz      NOT NULL,
 
     CONSTRAINT observations_metric_not_blank CHECK (metric <> ''),

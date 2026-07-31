@@ -28,12 +28,12 @@ async function insertObservations(rows: Observation[]): Promise<void> {
     const chunk = rows.slice(i, i + BATCH)
     const values: unknown[] = []
     const tuples = chunk.map((o, n) => {
-      values.push(o.observedOn, o.metric, o.value, o.unit, o.source, o.reportedAt)
-      const b = n * 6
-      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6})`
+      values.push(o.observedOn, o.metric, o.value, o.unit, o.source, o.recordedBy, o.reportedAt)
+      const b = n * 7
+      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7})`
     })
     await pool.query(
-      `INSERT INTO observations (observed_on, metric, value, unit, source, reported_at)
+      `INSERT INTO observations (observed_on, metric, value, unit, source, recorded_by, reported_at)
        VALUES ${tuples.join(',')}`,
       values,
     )

@@ -99,8 +99,13 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
   if (!isRecord(payload)) return { observations, workouts, uncatalogued }
   const data = isRecord(payload['data']) ? payload['data'] : payload
 
-  const emit = (observedOn: string, metric: string, value: number, unit: string) => {
-    observations.push({ observedOn, metric, value, unit, source: opts.source, reportedAt: opts.reportedAt })
+  const emit = (
+    observedOn: string, metric: string, value: number, unit: string, recordedBy: string | null,
+  ) => {
+    observations.push({
+      observedOn, metric, value, unit, recordedBy,
+      source: opts.source, reportedAt: opts.reportedAt,
+    })
   }
 
   const metrics = Array.isArray(data['metrics']) ? data['metrics'] : []
@@ -121,16 +126,17 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
       if (!isRecord(point)) continue
       const day = dayLabel(point['date'] ?? point['start'])
       if (day === null) continue
+      const by = typeof point['source'] === 'string' ? point['source'] : null
 
       if (haeName === 'sleep_analysis') {
         // Scale every field identically. `asleep` has been unreliable (0 on
         // some nights, a small bogus value on others), so totalSleep wins.
         const toMin = units === 'min' ? 1 : 60
         const total = num(point['totalSleep']) ?? num(point['asleep'])
-        if (total !== null) emit(day, 'sleep_asleep_min', total * toMin, 'min')
+        if (total !== null) emit(day, 'sleep_asleep_min', total * toMin, 'min', by)
         for (const [field, metric] of SLEEP_FIELDS) {
           const v = num(point[field])
-          if (v !== null) emit(day, metric, v * toMin, 'min')
+          if (v !== null) emit(day, metric, v * toMin, 'min', by)
         }
         continue
       }
@@ -138,7 +144,7 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
       if (haeName === 'heart_rate') {
         for (const [field, suffix] of [['Min', 'min'], ['Max', 'max'], ['Avg', 'avg']] as const) {
           const v = num(point[field])
-          if (v !== null) emit(day, `heart_rate_${suffix}`, v, units || 'count/min')
+          if (v !== null) emit(day, `heart_rate_${suffix}`, v, units || 'count/min', by)
         }
         continue
       }
@@ -148,11 +154,11 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
 
       if (haeName === 'weight_body_mass' || haeName === 'lean_body_mass') {
         const value = units === 'kg' ? qty * KG_TO_LBS : qty
-        emit(day, RENAME[haeName]!, value, 'lb')
+        emit(day, RENAME[haeName]!, value, 'lb', by)
         continue
       }
 
-      emit(day, RENAME[haeName] ?? haeName, qty, units)
+      emit(day, RENAME[haeName] ?? haeName, qty, units, by)
     }
   }
 

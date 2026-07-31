@@ -19,6 +19,7 @@ SELECT time_bucket(INTERVAL '1 day', observed_on) AS observed_on,
        metric,
        last(value, reported_at)  AS value,
        last(unit,  reported_at)  AS unit,
+       last(recorded_by, reported_at) AS recorded_by,
        max(reported_at)          AS last_reported_at,
        count(*)                  AS report_count      -- >1 means it was Restated
 FROM observations

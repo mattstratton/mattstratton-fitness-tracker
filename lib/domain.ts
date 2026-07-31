@@ -46,6 +46,9 @@ export type Observation = {
   value: number
   unit: string
   source: 'hae' | 'hae_backfill'
+  /** The device or app that recorded it, straight from HAE's per-point
+   *  `source`. Distinct from `source`, which is how it reached us. */
+  recordedBy: string | null
   reportedAt: Date
 }
 
