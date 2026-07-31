@@ -12,8 +12,12 @@ locally — an mtime-based "only parse what changed" cursor silently missed
 same-day updates to that file, so we don't try to be clever here.
 """
 
+import errno
 import json
-from datetime import datetime
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from lib import KG_TO_LBS, fail, get_db, load_env, log_sync
@@ -39,6 +43,38 @@ ACTIVITY_METRICS = {
     "active_energy": "active_energy_kcal",
     "apple_exercise_time": "exercise_minutes",
 }
+
+
+def _materialized(path: Path) -> bool:
+    """True once the file has local content. A dataless iCloud stub reports its
+    real st_size but zero allocated blocks."""
+    stat = path.stat()
+    return stat.st_size == 0 or stat.st_blocks > 0
+
+
+def read_export(path: Path, timeout: float = 30.0) -> str:
+    """Read an export file, materializing it from iCloud first if it's a stub.
+
+    Files under ~/Library/Mobile Documents can exist as metadata-only placeholders
+    with no local content; reading one has to download it first. A launchd agent
+    has no session that can drive that download, so instead of blocking forever
+    the kernel refuses with EDEADLK ("Resource deadlock avoided"). The same read
+    from a terminal succeeds, which made this look like corrupt files rather than
+    a permissions-shaped problem, and silently stranded four days of workouts.
+    `brctl download` asks the iCloud daemon to fetch it on our behalf.
+    """
+    try:
+        return path.read_text()
+    except OSError as e:
+        if e.errno != errno.EDEADLK:
+            raise
+    subprocess.run(["brctl", "download", str(path)], capture_output=True, timeout=timeout)
+    deadline = time.monotonic() + timeout
+    while not _materialized(path):
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"iCloud never materialized {path.name} after {timeout:.0f}s")
+        time.sleep(0.5)
+    return path.read_text()
 
 
 def metric_date(point: dict) -> str | None:
@@ -97,14 +133,51 @@ def upsert_body_metric(conn, metric_name: str, units: str, points: list) -> int:
     return n
 
 
+HAE_TS_FMT = "%Y-%m-%d %H:%M:%S %z"
+
+
 def _span_hours(start: str | None, end: str | None) -> float | None:
     if not start or not end:
         return None
-    fmt = "%Y-%m-%d %H:%M:%S %z"
     try:
-        return (datetime.strptime(end, fmt) - datetime.strptime(start, fmt)).total_seconds() / 3600.0
+        return (datetime.strptime(end, HAE_TS_FMT)
+                - datetime.strptime(start, HAE_TS_FMT)).total_seconds() / 3600.0
     except ValueError:
         return None
+
+
+def _utc_key(ts: str) -> str:
+    """Normalize an offset-bearing HAE timestamp to UTC for use in a key.
+
+    '2026-07-26 10:33:41 -0500' and '2026-07-26 11:33:41 -0400' are the same
+    instant written by two automations on either side of a timezone change, so
+    keying on the raw string filed one workout as two rows.
+    """
+    try:
+        return datetime.strptime(ts, HAE_TS_FMT).astimezone(timezone.utc).isoformat()
+    except ValueError:
+        return ts
+
+
+def normalize_workout_ids(conn) -> tuple[int, int]:
+    """Rewrite pre-existing workout ids to the UTC-normalized form.
+
+    Idempotent, so it just no-ops on every run after the first. Repairs history
+    in place rather than wiping and re-ingesting, because the oldest rows came
+    from an export file that no longer sits in the watched folders.
+    """
+    renamed = merged = 0
+    for old_id, start, wtype in conn.execute("SELECT id, start_ts, type FROM workouts").fetchall():
+        new_id = f"{_utc_key(start)}|{wtype}"
+        if new_id == old_id:
+            continue
+        if conn.execute("SELECT 1 FROM workouts WHERE id = ?", (new_id,)).fetchone():
+            conn.execute("DELETE FROM workouts WHERE id = ?", (old_id,))  # twin already has it
+            merged += 1
+        else:
+            conn.execute("UPDATE workouts SET id = ? WHERE id = ?", (new_id, old_id))
+            renamed += 1
+    return renamed, merged
 
 
 def upsert_sleep(conn, units: str, points: list) -> int:
@@ -145,8 +218,9 @@ def upsert_workouts(conn, workouts: list) -> int:
         if not start:
             continue
         # HAE writes each automation's output to two folders, and only some
-        # variants carry an id — key on start|type so duplicates collapse.
-        wid = f"{start}|{wtype}"
+        # variants carry an id — key on start|type so duplicates collapse. The
+        # start has to be normalized to UTC first; see _utc_key.
+        wid = f"{_utc_key(start)}|{wtype}"
         duration = w.get("duration")
         energy = w.get("activeEnergyBurned")
         if isinstance(energy, dict):
@@ -167,7 +241,7 @@ def upsert_workouts(conn, workouts: list) -> int:
 
 
 def ingest_file(conn, path: Path) -> tuple[int, list]:
-    payload = json.loads(path.read_text())
+    payload = json.loads(read_export(path))
     data = payload.get("data", payload)
     rows = 0
     unknown = []
@@ -205,6 +279,9 @@ def main():
         fail("hae", "no export dir found (looked for AutoExport/HealthExport in iCloud)")
 
     conn = get_db()
+    renamed, merged = normalize_workout_ids(conn)
+    if renamed or merged:
+        print(f"hae: normalized {renamed} workout id(s), merged {merged} timezone duplicate(s)")
 
     # Each automation writes to two folders (scheduled + manual-sync-triggered),
     # and either can be the more current one on a given day. Process oldest to
@@ -232,6 +309,11 @@ def main():
     log_sync(conn, "hae", files, total_rows, "ok" if not errors else "partial", message.strip())
     print(f"hae: {files} files, {total_rows} rows upserted"
           + (f" — {message.strip()}" if message.strip() else ""))
+    # Exit nonzero on skipped files. Burying these in sync_log.message let two
+    # unreadable exports strand four days of workouts without anyone noticing.
+    if errors:
+        print(f"ERROR [hae]: {len(errors)} file(s) unreadable: {errors}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

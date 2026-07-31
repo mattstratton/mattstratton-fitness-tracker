@@ -16,11 +16,23 @@ MCP are the source of truth for where Matty's training actually is.
 ## Step 1 — Freshness check
 
 ```bash
-sqlite3 fitness.db "SELECT source, MAX(run_ts) FROM sync_log WHERE status='ok' GROUP BY source;"
+make check
 ```
 
-If any source is >48h stale (or missing), run `make sync`. If it errors, tell Matty
-what's stale and coach on what's available — with the staleness stated up front.
+This reports the newest date **per table**, which is the question that matters. Do
+not substitute a `sync_log` query: `sync_log` only says whether an ingest ran, and
+in July 2026 it reported `ok` hourly for five days while an iOS update had silently
+dropped HAE's HealthKit permission for weight. Every sync succeeded; no weight
+arrived.
+
+If `check` reports anything stale, run `make sync`, then re-check. If it's still
+stale, say so up front and coach on what's available — and consider that the phone
+may need attention rather than the pipeline (see CLAUDE.md § Freshness).
+
+**Today's row is always partial.** HAE exports whatever has been logged so far, so
+a midday export made a real 1241 kcal / 175g protein day look like 333 kcal / 23g.
+Exclude today from every average and trend. `check` labels it `partial` for exactly
+this reason.
 
 ## Step 2 — Snapshot
 
@@ -28,8 +40,10 @@ Pull a compact current-state picture before the conversation:
 
 - **Training (last 14d):** sessions from `liftosaur_sets` — dates, day names, top sets
   for the T1/T2 lifts (max weight × reps per exercise per session), any reps=0 failures.
-- **Nutrition (last 7d):** avg calories + protein from `nutrition`; note days with no
-  log (gaps ≠ zeros — treat missing days as unlogged, never as fasting).
+- **Nutrition (last 7d):** avg calories + protein from `nutrition`, **excluding today**
+  (see Step 1). Note days with no log (gaps ≠ zeros — treat missing days as unlogged,
+  never as fasting), and be suspicious of any implausibly low single day: check
+  whether it's the newest date in the table before reading anything into it.
 - **Body:** `weight_lbs` trend over last 30d from `body_metrics` (first vs last vs avg).
 - **Recovery/context:** avg sleep last 7d; any `workouts` rows (yoga etc.) last 14d.
 - **Program state (live):** if the chat is about what's next or program changes, check

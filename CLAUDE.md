@@ -58,9 +58,31 @@ weight × reps per session.
 
 ## Freshness
 
-Before coaching on the data, check `sync_log`: if the latest 'ok' run for a source is
->48h old, run `make sync` first (or warn if it fails). HAE data arrives via a nightly
-iCloud export; a gap usually means the phone app needs attention, not the pipeline.
+Run `make check` before coaching on the data. It reports the newest date per table
+and exits nonzero when the pipeline genuinely isn't delivering. If it flags anything,
+`make sync`, then re-check.
+
+**Don't use `sync_log` to judge freshness.** It records whether an ingest *ran*, not
+whether data arrived. In July 2026 it logged `ok` every hour for five days while an
+iOS update had dropped HAE's HealthKit read permission for weight — syncs succeeded,
+no weight came through. `check_freshness.py` splits sources accordingly: `activity`
+and `sleep` are written by the Watch unprompted, so a gap there is always a broken
+pipeline (hard failure), while `nutrition`/`weight`/`workouts` depend on Matty logging
+or weighing in, so a gap warns but may just be travel.
+
+**Today's row is always a partial day** — HAE exports whatever has been logged so far.
+Exclude it from averages and trends.
+
+Two known failure modes worth recognizing:
+
+- **Phone-side.** HAE stops exporting a metric, or exports empty arrays for it. Fix is
+  on the phone (Settings → Health → Data Access & Devices → Health Auto Export), not
+  in this repo. Compare metrics against each other in
+  `AutoSync/HealthMetrics/<metric>/YYYYMMDD.hae` — a 70-byte file is an empty payload,
+  so one metric empty while its neighbours have data means a permission, not a gap.
+- **Dataless iCloud files.** Exports can sit as metadata-only placeholders that a
+  launchd agent can't materialize, failing with `EDEADLK`. `read_export()` in
+  `ingest_hae.py` handles this via `brctl download`; see its docstring.
 
 ## Live actions
 
