@@ -185,6 +185,49 @@ The honest list. Most of these are better story beats than the things that went 
 
 ---
 
+## Backfill results (local TimescaleDB 2.29, 2026-07-31)
+
+Ten years loaded from 87MB of JSON in **2.2 seconds**.
+
+| | |
+|---|---|
+| Observations | **68,858** (from 56,402 source points; `heart_rate`→3, `sleep_analysis`→6) |
+| Workouts | **790** stored from 806 parsed — 16 were duplicates *within* single export files |
+| Distinct metrics | 81 |
+| Unit anomalies | **0** |
+| Unclassified workout types | **0** |
+| Size before compression | 20 MB |
+| Size after | **3,952 kB** |
+| **Compression ratio** | **11.9×** across 11 chunks (17 MB → 1,456 kB) |
+| Idempotency | second run: identical counts |
+
+Sessions over ten years: **399 cardio, 300 lifting, 60 mobility, 31 other.** The lifting
+app holds 182 of them.
+
+### Real data broke things synthetic data didn't
+
+- **Duplicate workouts inside one export file.** The 2016–2018 archive repeats sessions,
+  and Postgres refuses to let `ON CONFLICT DO UPDATE` touch a row twice in one statement.
+  Fixed in the parser (not the loader), since a push payload could carry the same thing.
+- **Continuous aggregates can't be created inside a transaction**, which the migration
+  runner wrapped everything in. Needed `WITH NO DATA` plus a `migrate:no-transaction`
+  opt-out marker.
+- **20 workout types, not one.** See wrong turn #8.
+
+### Two findings that are about the data, not the pipeline
+
+1. **`energy_balance` overstates the deficit by ~2.4×.** Last 20 days: intake 1,542 kcal,
+   Apple expenditure 3,084, net −1,542/day → predicts ~3 lb/week. Actual trend over the
+   same window (277.1 → 271.9) is ~1.25 lb/week, implying a real deficit nearer −625.
+   `basal_energy_burned` is a formula estimate from weight/height/age and watch
+   `active_energy` runs generous; both are real numbers whose *difference* is not a
+   measurement. Good post material: the metric I was most excited to finally store turned
+   out to need a caveat the moment it met reality. MacroFactor's own expenditure figure,
+   derived from weight trend vs logged intake, is far better calibrated.
+2. **A 343.5 lb reading in 2021** against a 280–300 baseline. Bad smart-scale reading or
+   another person on it. `unit_anomalies` is clean, so this is data quality rather than
+   parsing — but any naive min/max or trend query will pick it up.
+
 ## Numbers to re-measure before publishing
 
 - [ ] Compression ratio via `hypertable_compression_stats('observations')`, before/after,

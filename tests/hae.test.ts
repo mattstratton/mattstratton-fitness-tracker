@@ -154,3 +154,24 @@ test('the same workout in two timezone offsets is one instant', () => {
   const b = parseHaePayload({ data: { workouts: [{ name: 'Yoga', start: '2026-07-26 11:33:41 -0400' }] } }, { reportedAt: REPORTED_AT, source: 'hae' })
   assert.equal(a.workouts[0]!.startedAt.getTime(), b.workouts[0]!.startedAt.getTime())
 })
+
+test('deduplicates workouts sharing a natural key within one payload', () => {
+  // Real 2016-2018 exports repeat sessions inside a single file, which makes
+  // ON CONFLICT DO UPDATE fail: Postgres won't touch one row twice per
+  // statement. Last occurrence wins, as with any other Restatement.
+  const { workouts } = parseHaePayload(
+    {
+      data: {
+        workouts: [
+          { name: 'Yoga', start: '2026-07-26 10:33:41 -0500', activeEnergyBurned: { qty: 100 } },
+          { name: 'Yoga', start: '2026-07-26 10:33:41 -0500', activeEnergyBurned: { qty: 111 } },
+          // same instant, different type -> genuinely two sessions
+          { name: 'Walk', start: '2026-07-26 10:33:41 -0500', activeEnergyBurned: { qty: 50 } },
+        ],
+      },
+    },
+    { reportedAt: REPORTED_AT, source: 'hae' },
+  )
+  assert.equal(workouts.length, 2)
+  assert.equal(workouts.find((w) => w.type === 'Yoga')!.energyKcal, 111)
+})

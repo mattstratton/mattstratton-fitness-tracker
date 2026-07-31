@@ -1,5 +1,10 @@
+-- migrate:no-transaction
+--
 -- Current truth, derived from the Report log, plus the friendly shapes that
 -- keep /coach queries looking like they did under SQLite.
+--
+-- Runs outside a transaction: CREATE MATERIALIZED VIEW ... WITH
+-- (timescaledb.continuous) cannot run inside a transaction block.
 
 -- ---------------------------------------------------------------------------
 -- The single most load-bearing object in the schema.
@@ -17,7 +22,11 @@ SELECT time_bucket(INTERVAL '1 day', observed_on) AS observed_on,
        max(reported_at)          AS last_reported_at,
        count(*)                  AS report_count      -- >1 means it was Restated
 FROM observations
-GROUP BY 1, 2;
+GROUP BY 1, 2
+-- Materialise later rather than during the migration. The backfill calls
+-- refresh_continuous_aggregate once the rows are in, which is both faster and
+-- keeps the migration from doing minutes of work.
+WITH NO DATA;
 
 -- Real-time aggregation ON, deliberately. Today's Reports must be visible the
 -- moment they land -- a coaching conversation that can't see this morning's

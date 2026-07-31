@@ -156,6 +156,12 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
     }
   }
 
+  // Keyed by the natural key so a payload cannot contain the same workout
+  // twice. Real exports do: the 2016-2018 archive repeats sessions within a
+  // single file, and Postgres refuses to let ON CONFLICT DO UPDATE touch one
+  // row twice in a statement. Last occurrence wins, matching how a Restatement
+  // is resolved everywhere else.
+  const byKey = new Map<string, HealthWorkout>()
   const rawWorkouts = Array.isArray(data['workouts']) ? data['workouts'] : []
   for (const raw of rawWorkouts) {
     if (!isRecord(raw)) continue
@@ -170,15 +176,20 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
     const durationRaw = raw['duration']
     const durationSec = isRecord(durationRaw) ? num(durationRaw['qty']) : num(durationRaw)
 
-    workouts.push({
+    const type =
+      (typeof raw['name'] === 'string' && raw['name']) ||
+      (typeof raw['workoutName'] === 'string' && raw['workoutName']) ||
+      'Unknown'
+
+    byKey.set(`${startedAt.toISOString()}|${type}`, {
       startedAt,
-      type: (typeof raw['name'] === 'string' && raw['name']) ||
-            (typeof raw['workoutName'] === 'string' && raw['workoutName']) || 'Unknown',
+      type,
       endedAt: typeof raw['end'] === 'string' ? parseInstant(raw['end']) : null,
       durationMin: durationSec === null ? null : durationSec / 60,
       energyKcal,
     })
   }
+  workouts.push(...byKey.values())
 
   return { observations, workouts, uncatalogued }
 }
