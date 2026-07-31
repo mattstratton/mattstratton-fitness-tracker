@@ -37,7 +37,34 @@ Good for days appetite is trashed but protein still needs to happen:
 
 ## Patterns observed from logs (update as more data comes in)
 
-From the 7/17-7/23 MacroFactor export:
+### 7/14–7/30, 17 complete days of unbroken logging
+
+The first stretch long enough to mean anything (the strategy doc asks for 2-3 weeks
+before drawing conclusions — this clears it).
+
+| | Actual | Target |
+|---|---|---|
+| Calories | **1656** | 1660 |
+| Protein | **143g** | 198g |
+
+Calorie adherence is essentially perfect. Protein is 55g/day short — 3 of 17 days hit
+198g, 9 of 17 came in under 150g.
+
+**The useful reframe: this is not an "eat more" problem, it's a swap problem.** Hitting
+the calorie number dead-on while missing protein by 55g means roughly 55g worth of
+protein calories are arriving as carbs and fat instead. At 1656 kcal, 198g protein is
+48% of intake — which is exactly what the MacroFactor split already prescribes
+(198p/55f/91c ≈ 1651 kcal). The target is internally consistent; it just demands
+genuinely protein-dense choices rather than more food. Two shakes swapped in for
+equivalent calories closes most of the gap.
+
+Lifting days average **148g** protein vs **134g** on rest days, so the instinct to eat
+more around training is already there — both numbers are just short.
+
+Good example day: **7/30 — 1241 kcal / 175g protein.** Proof the density is achievable
+without extra calories.
+
+### From the 7/17-7/23 MacroFactor export:
 
 - **Good protein days (7/18: 214g, 7/20: 149g, 7/22: 151g)** all had either 2
   shakes, or one big protein-anchor item (a large chicken serving, canned tuna),
@@ -59,3 +86,11 @@ From the 7/17-7/23 MacroFactor export:
   exactly the "not hungry but still need protein" moment.
 - Consider whether the 8pm end of the feeding window needs to move later,
   given it's already being missed on the two worst-protein days observed so far.
+
+## Reading the data — a trap worth remembering
+
+Never read a single implausibly low day as real without checking whether it's the
+newest date in `nutrition`. Today's row is always a partial day, because HAE exports
+whatever has been logged at the moment it runs. On 7/31 this made 7/30 look like a
+333 kcal / 23g-protein fast that Matty deadlifted through; the real day was 1241 kcal
+and 175g, one of his better ones. `make check` labels the partial day explicitly.
