@@ -13,15 +13,23 @@
     "sync-liftosaur": "tsx scripts/sync-liftosaur.ts",
     "diff-oracle": "tsx scripts/diff-oracle.ts",
     "scan-exports": "tsx scripts/scan-exports.ts",
-    "q": "tsx scripts/q.ts"
+    "q": "tsx scripts/q.ts",
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start"
   },
   "dependencies": {
-    "pg": "^8.13.1"
+    "next": "^16.2.12",
+    "pg": "^8.13.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
-    "typescript": "^5.7.2",
-    "tsx": "^4.19.2"
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
