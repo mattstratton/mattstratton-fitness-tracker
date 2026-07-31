@@ -302,6 +302,33 @@ chunk, hourly, forever.
 have reported identically: an error with the constraint message, a run that wrote 1,713
 sets, and a run that found 189 records and correctly wrote nothing.
 
+## The oracle diff caught a bug no unit test would have
+
+Diffing Tiger Cloud against `fitness.db` over the 2026-04-19→now overlap. First run:
+**486/507 matched, 21 differences** — and one cluster was a real regression I had shipped.
+
+**All twelve `sleep_in_bed_min` values were zero.** HAE reports `inBed: 0` on most nights
+while `inBedStart`/`inBedEnd` carry the actual interval. The old Python survived this *by
+accident*: `p.get("inBed") or p.get("inBedTime") or _span_hours(...)` — Python's `or`
+treats `0` as falsy, so it silently fell through to computing the span. My TypeScript read
+the field directly and faithfully stored the zero, wiping out every in-bed figure. Same
+applies to `totalSleep: 0`, which also happens.
+
+No unit test would have found this, because I'd have written the test from the same
+mistaken understanding that produced the bug. Only a known-good reference could. That is
+the argument for building the oracle diff *before* deleting the thing you're replacing.
+
+After the fix: **493/495**, with the remaining differences fully accounted for:
+
+| Difference | Count | Verdict |
+|---|---|---|
+| Everything dated today | 8 | Partial Day. Both stores captured it at different moments; Tiger Cloud is higher on all 8 (448 vs 228 kcal, 1816 vs 1063 steps) because its export is later. Differs by construction. |
+| `weight_lbs` on 2026-05-09 and 2026-06-19 | 2 | **Restatements.** Tiger Cloud matches the current export to six decimal places; SQLite is stale. HealthKit revised those two values after the old pipeline had stopped seeing those dates in its rolling window. |
+| Workouts | 0 | All 30 found, keyed on the instant — which independently confirms the `timestamptz` approach agrees with the old hand-written `_utc_key` repair. |
+
+The second row is the whole thesis in miniature: the old schema silently held two stale
+values and could not tell you they had ever changed. The new one records the Restatement.
+
 ## The outlier that found a missing column
 
 Probably the best single anecdote in here, because it went through three wrong answers.

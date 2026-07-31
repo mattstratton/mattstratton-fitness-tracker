@@ -191,3 +191,32 @@ test('captures the device or app that recorded a value', () => {
   })
   assert.deepEqual(out.map((o) => o.recordedBy), ['MyFitnessPal', 'MyFitnessPal | Withings'])
 })
+
+test('inBed 0 falls back to the inBedStart/inBedEnd span', () => {
+  // HAE reports inBed: 0 on most nights while the start/end pair holds the real
+  // interval. The old Python survived by accident (`0 or span` is falsy); the
+  // first TS port stored the zero and wiped out every in-bed figure. Caught by
+  // diffing against the old database, not by any unit test -- hence this one.
+  const out = obs({
+    data: { metrics: [{ name: 'sleep_analysis', units: 'hr', data: [{
+      date: '2026-07-28 00:00:00 -0500', totalSleep: 8.449, asleep: 0, inBed: 0,
+      inBedStart: '2026-07-27 20:12:32 -0500', inBedEnd: '2026-07-28 06:15:01 -0500',
+      sleepStart: '2026-07-27 20:12:32 -0500', sleepEnd: '2026-07-28 06:15:01 -0500',
+    }] }] },
+  })
+  const by = Object.fromEntries(out.map((o) => [o.metric, o.value]))
+  assert.ok(Math.abs(by['sleep_in_bed_min']! - 602.48) < 0.1, `got ${by['sleep_in_bed_min']}`)
+  assert.ok(Math.abs(by['sleep_asleep_min']! - 506.94) < 0.1, `got ${by['sleep_asleep_min']}`)
+})
+
+test('totalSleep 0 also falls back to the sleep span', () => {
+  const out = obs({
+    data: { metrics: [{ name: 'sleep_analysis', units: 'hr', data: [{
+      date: '2026-07-31 00:00:00 -0500', totalSleep: 0, asleep: 0, inBed: 6.495,
+      sleepStart: '2026-07-31 00:23:19 -0500', sleepEnd: '2026-07-31 06:53:00 -0500',
+    }] }] },
+  })
+  const by = Object.fromEntries(out.map((o) => [o.metric, o.value]))
+  assert.ok(Math.abs(by['sleep_asleep_min']! - 389.68) < 0.1, `got ${by['sleep_asleep_min']}`)
+  assert.ok(Math.abs(by['sleep_in_bed_min']! - 389.7) < 0.1, `got ${by['sleep_in_bed_min']}`)
+})

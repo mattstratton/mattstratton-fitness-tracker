@@ -82,9 +82,35 @@ function dayLabel(raw: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null
 }
 
+/**
+ * Hours between two HAE timestamps, or null.
+ *
+ * Needed because HAE frequently reports `inBed: 0` and sometimes `totalSleep: 0`
+ * while the corresponding start/end pair holds the real interval. The old Python
+ * survived this by accident -- `a or b or span(...)` treats 0 as falsy -- and the
+ * first TypeScript port read the field directly and dutifully stored zero,
+ * wiping out every in-bed figure. Caught by diffing against the old database.
+ */
+function spanHours(point: Record<string, unknown>, startKey: string, endKey: string): number | null {
+  const a = typeof point[startKey] === 'string' ? parseInstant(point[startKey] as string) : null
+  const b = typeof point[endKey] === 'string' ? parseInstant(point[endKey] as string) : null
+  if (a === null || b === null) return null
+  const hours = (b.getTime() - a.getTime()) / 3_600_000
+  return hours > 0 ? hours : null
+}
+
+/** A duration field, falling back to its start/end pair when zero or absent. */
+function duration(
+  point: Record<string, unknown>, field: string, startKey: string, endKey: string,
+): number | null {
+  const direct = num(point[field])
+  // Zero is treated as "not reported", not as "slept for no time".
+  if (direct !== null && direct > 0) return direct
+  return spanHours(point, startKey, endKey)
+}
+
 // Sleep arrives as hours by default; every field is scaled the same way.
 const SLEEP_FIELDS: Array<[source: string, metric: string]> = [
-  ['inBed', 'sleep_in_bed_min'],
   ['core', 'sleep_core_min'],
   ['deep', 'sleep_deep_min'],
   ['rem', 'sleep_rem_min'],
@@ -132,8 +158,13 @@ export function parseHaePayload(payload: unknown, opts: ParseOptions): ParsedPay
         // Scale every field identically. `asleep` has been unreliable (0 on
         // some nights, a small bogus value on others), so totalSleep wins.
         const toMin = units === 'min' ? 1 : 60
-        const total = num(point['totalSleep']) ?? num(point['asleep'])
+        const total = duration(point, 'totalSleep', 'sleepStart', 'sleepEnd')
+          ?? duration(point, 'asleep', 'sleepStart', 'sleepEnd')
         if (total !== null) emit(day, 'sleep_asleep_min', total * toMin, 'min', by)
+        const inBed = duration(point, 'inBed', 'inBedStart', 'inBedEnd')
+        if (inBed !== null) emit(day, 'sleep_in_bed_min', inBed * toMin, 'min', by)
+        // Stages keep their literal values: `awake: 0` is a real answer, and
+        // they have no start/end pair to fall back to anyway.
         for (const [field, metric] of SLEEP_FIELDS) {
           const v = num(point[field])
           if (v !== null) emit(day, metric, v * toMin, 'min', by)
