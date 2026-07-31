@@ -30,6 +30,13 @@ function toLbs(amount: string | undefined, unit: string | undefined): number | n
   if (amount === undefined) return null
   const n = Number(amount)
   if (!Number.isFinite(n)) return null
+  // Liftosaur writes "0lb" for bodyweight movements -- 52 sets across plank,
+  // crunch, hanging leg raise, inverted row, bodyweight squat. That means
+  // exactly what NULL already means here: no external load. Keeping both would
+  // give one concept two representations, so every "did I add weight?" query
+  // would need `> 0` instead of `IS NOT NULL`, and AVG(weight_lbs) would
+  // quietly average real loads against zeroes.
+  if (n === 0) return null
   return unit === 'kg' ? n * KG_TO_LBS : n
 }
 

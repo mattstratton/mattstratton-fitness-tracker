@@ -132,3 +132,17 @@ test('the same record parses identically twice (hash is stable)', () => {
   assert.equal(parseRecord(RECORD).record.textHash, parseRecord(RECORD).record.textHash)
   assert.notEqual(parseRecord(RECORD).record.textHash, parseRecord({ ...RECORD, text: RECORD.text + ' ' }).record.textHash)
 })
+
+test('0lb means bodyweight, and is stored the same way as no weight at all', () => {
+  // Real data: 52 sets across plank, crunch, hanging leg raise and bodyweight
+  // squat arrive as "0lb". A CHECK constraint (weight_lbs > 0) caught this on
+  // first contact with Tiger Cloud -- the kind of thing typeless SQLite could
+  // never have told us.
+  assert.deepEqual(parseSets('3x12 0lb'), [
+    { reps: 12, weightLbs: null },
+    { reps: 12, weightLbs: null },
+    { reps: 12, weightLbs: null },
+  ])
+  // ...identical to the same movement logged with no weight segment at all
+  assert.deepEqual(parseSets('3x12 0lb'), parseSets('3x12'))
+})

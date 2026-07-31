@@ -260,6 +260,48 @@ have been a permanent hole punched to work around a condition that resolved itse
 the investigation finished. Also note `libpq` needs `PGSSLROOTCERT` pointed at a CA bundle
 on macOS where Node just works — psql and Node disagree about what "verify" means.
 
+## A CHECK constraint earned its keep in the first 30 seconds
+
+The Liftosaur sync failed immediately on `lifting_sets_weight_sane CHECK (weight_lbs > 0)`.
+Cause: **52 sets across plank, crunch, hanging leg raise, inverted row and bodyweight
+squat arrive from Liftosaur as `0lb`.**
+
+`0lb` means "no external load" — which is exactly what `NULL` already meant in this schema
+for a set logged as `3x12` with no weight segment at all. One concept, two representations.
+Relaxing the constraint to `>= 0` would have been the easy fix and the wrong one: every
+"did I add weight?" query would then need `> 0` instead of `IS NOT NULL`, and
+`AVG(weight_lbs)` would quietly average real loads against zeroes. Normalised in the parser
+instead.
+
+The point for the post: **SQLite could not have told us this.** It was typeless and had no
+constraints, so those 52 rows sat there for two and a half years as an unnoticed ambiguity.
+The first schema with actual constraints found it before the first sync finished. That is
+the entire argument for the migration, delivered unprompted in the first thirty seconds.
+
+## Both sources live on Tiger Cloud
+
+| | |
+|---|---|
+| `lifting_sets` | **2,416** — exact parity with SQLite |
+| of which bodyweight (NULL) | 52 |
+| of which failed sets (reps=0) | 15 — matches SQLite |
+| `lifting_records` | 189 |
+| `health_workouts` | 790 |
+| `training_sessions` (reconciled) | **792** |
+| naive double-count | 979 |
+
+187 Apple shadow copies absorbed into their Liftosaur records, each donating the energy and
+duration Liftosaur has no idea about.
+
+**The hash-skip works.** First sync: 125 records changed, 1,713 sets written. Second sync:
+`189 records seen, 0 changed, 0 sets written`. The old Python DELETE-INSERTed all 2.5 years
+every single run; against a compressed hypertable that would have meant decompressing every
+chunk, hourly, forever.
+
+**`ingest_runs` immediately justified itself** by recording three runs that `sync_log` would
+have reported identically: an error with the constraint message, a run that wrote 1,713
+sets, and a run that found 189 records and correctly wrote nothing.
+
 ## The outlier that found a missing column
 
 Probably the best single anecdote in here, because it went through three wrong answers.
