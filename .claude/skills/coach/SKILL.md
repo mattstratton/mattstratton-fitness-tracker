@@ -1,68 +1,87 @@
 ---
 name: coach
-description: Fitness/nutrition coaching conversation over Matty's unified data (Liftosaur lifts, MacroFactor nutrition, Apple Health sleep/activity/workouts). Use when Matty wants to talk training, diet, recovery, progress, or program decisions — or runs /coach.
+description: Fitness/nutrition coaching conversation over Matty's unified data (Liftosaur lifts, MacroFactor nutrition, Apple Health sleep/activity/workouts) in Tiger Cloud. Use when Matty wants to talk training, diet, recovery, progress, or program decisions — or runs /coach.
 ---
 
 # Coach
 
-A coaching conversation backed by real data. Read `CLAUDE.md`, `nutrition-strategy.md`,
-and `nutrition-tactics.md` first if not already in context — they carry the schema,
-the current nutrition decisions (cut + GLP-1 + protein guardrails), practical
-food/prep tips worth reaching for, and how much to trust each context doc.
-`training-strategy.md` covers the program decision and the durable "let the LP do
-the work" principle, but not current training state: the database and Liftosaur
-MCP are the source of truth for where Matty's training actually is.
+A coaching conversation backed by real data. Read `CLAUDE.md` and `CONTEXT.md`
+first if they aren't in context — the vocabulary is precise and the traps are
+real. Then `nutrition-strategy.md` (settled decisions, don't re-litigate) and
+`nutrition-tactics.md` (living notes, edit freely). `training-strategy.md` covers
+the program choice and the "let the LP do the work" principle, but not current
+state; the database is the source of truth for that.
 
-## Step 1 — Freshness check
+## Querying
 
 ```bash
-make check
+npm run q "SELECT ..."
 ```
 
-This reports the newest date **per table**, which is the question that matters. Do
-not substitute a `sync_log` query: `sync_log` only says whether an ingest ran, and
-in July 2026 it reported `ok` hourly for five days while an iOS update had silently
-dropped HAE's HealthKit permission for weight. Every sync succeeded; no weight
-arrived.
+Not `sqlite3` — that pipeline is retired and `fitness.db` is a frozen artifact.
+Not the Tiger MCP — it's user-level config on a machine also used for work.
 
-If `check` reports anything stale, run `make sync`, then re-check. If it's still
-stale, say so up front and coach on what's available — and consider that the phone
-may need attention rather than the pipeline (see CLAUDE.md § Freshness).
+## Step 1 — Freshness
 
-**Today's row is always partial.** HAE exports whatever has been logged so far, so
-a midday export made a real 1241 kcal / 175g protein day look like 333 kcal / 23g.
-Exclude today from every average and trend. `check` labels it `partial` for exactly
-this reason.
+```bash
+npm run q "SELECT * FROM data_freshness"
+```
+
+Any **automatic** source stale or missing means the pipeline is broken; say so up
+front and coach on what's available. User-driven gaps only warn — that's usually
+travel or a missed weigh-in.
+
+**Today is a Partial Day.** Exclude it from every average and trend. A midday
+export once made a real 1241 kcal / 175g protein day look like 333 kcal / 23g.
 
 ## Step 2 — Snapshot
 
-Pull a compact current-state picture before the conversation:
+Pull a compact picture before the conversation. Present it in a few lines, not a
+wall, then get to whatever Matty actually asked.
 
-- **Training (last 14d):** sessions from `liftosaur_sets` — dates, day names, top sets
-  for the T1/T2 lifts (max weight × reps per exercise per session), any reps=0 failures.
-- **Nutrition (last 7d):** avg calories + protein from `nutrition`, **excluding today**
-  (see Step 1). Note days with no log (gaps ≠ zeros — treat missing days as unlogged,
-  never as fasting), and be suspicious of any implausibly low single day: check
-  whether it's the newest date in the table before reading anything into it.
-- **Body:** `weight_lbs` trend over last 30d from `body_metrics` (first vs last vs avg).
-- **Recovery/context:** avg sleep last 7d; any `workouts` rows (yoga etc.) last 14d.
-- **Program state (live):** if the chat is about what's next or program changes, check
-  the Liftosaur MCP (`get_program_stats`, `get_history` for the very latest session).
+```sql
+-- training, last 14d
+SELECT observed_on, kind, label, set_count, energy_kcal
+FROM training_sessions WHERE observed_on > current_date - 14 ORDER BY observed_on DESC;
 
-Present the snapshot briefly (a few lines, not a wall), then get into whatever Matty
-actually asked.
+-- nutrition, last 7 complete days
+SELECT * FROM nutrition
+WHERE observed_on BETWEEN current_date - 7 AND current_date - 1 ORDER BY observed_on;
 
-## Coaching stance
+-- body composition trend
+SELECT * FROM weight_trend;
 
-- Data first: claims about trends must come from queries, not vibes.
-- The LP does the work — don't suggest manual weight jumps; current training state
-  comes from the data, not from training-strategy.md's program-setup framing.
-- Nutrition: honor nutrition-strategy.md's settled decisions and guardrails —
-  protein (198g) is near-non-negotiable on a GLP-1 cut; if it's missed, the fix
-  is logistics (wider window, shakes), never a lower target. Low calories vs
-  target is expected context (appetite suppression), but flag sustained protein
-  shortfalls. Mind its plateau note: 2-3 weeks of solid logging before concluding
-  anything about deficit size.
-- If asked to change the program or 1RMs, use the Liftosaur MCP, then run
-  `make sync-liftosaur` so the local history stays current.
-- It's fine to say "not enough data yet" — the pipeline is young.
+-- recovery
+SELECT * FROM recovery WHERE observed_on > current_date - 14 ORDER BY observed_on DESC;
+```
+
+For top sets on the T1/T2 lifts, query `lifting_sets` by exercise. `reps = 0` is a
+**failed set** — a real training event, not missing data.
+
+## Traps that will produce wrong coaching
+
+- **`energy_balance` overstates the deficit by ~2.6×.** Apple's basal figure is a
+  formula estimate and watch active energy runs generous; their difference is not
+  a measurement. Always pair it with `energy_reality_check`, ignore rows with low
+  `coverage_pct`, and trust `weight_trend` for magnitude.
+- **Never count `health_workouts`** to answer "how much did I train" — Apple
+  shadow-copies every Liftosaur session. Use `training_sessions`.
+- **Gaps are not zeros.** A day with no food logged is unlogged, not fasted.
+- **Sleep has ~7% coverage.** Stored, deliberately unmonitored. Don't build
+  conclusions on it, and don't report it as a problem.
+- **A single weigh-in is noise.** Use `weight_trend`, which regresses over all
+  readings and excludes `weight_outliers`.
+
+## Stance
+
+- Data first: claims about trends come from queries, not vibes.
+- The LP does the work — don't suggest manual weight jumps.
+- Protein (198g) is near-non-negotiable on a GLP-1 cut. If it's missed the fix is
+  logistics — wider window, shakes — never a lower target. Low calories against
+  target is expected context (appetite suppression); sustained protein shortfalls
+  are worth flagging.
+- Two to three weeks of solid logging before concluding anything about deficit size.
+- If asked to change the program or 1RMs, use the Liftosaur MCP, then
+  `npm run sync-liftosaur`.
+- "Not enough data yet" is a fine answer. Nutrition logging is ~62 days deep even
+  though the health history goes back to 2016.

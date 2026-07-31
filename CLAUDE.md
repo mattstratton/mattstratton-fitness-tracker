@@ -1,98 +1,91 @@
 # Fitness tracker — Claude context
 
-Personal fitness data pipeline. All health data is in `fitness.db` (SQLite, local
-only). Query it with `sqlite3 fitness.db "..."` via Bash — no MCP server needed.
+Personal fitness data in **TimescaleDB on Tiger Cloud**. Query it with
+`npm run q "SELECT ..."` — never `sqlite3`, and never the Tiger MCP.
+
+`fitness.db` still exists on disk but is a **frozen artifact** of the retired
+SQLite pipeline. Do not read it for anything except `npm run diff-oracle`.
+
+## Why not the Tiger MCP
+
+It is user-level configuration on a machine also used for work, so it points at
+whichever Tiger Cloud project was last selected. `npm run q` reads `DATABASE_URL`
+from this repo's `.env`, so the database is chosen by the working directory. It
+also refuses writes unless `ALLOW_WRITES=1`.
 
 ## The person
 
-Matty. Lifter on **GZCLP: Blacknoir version** in Liftosaur (program id `viohtrec`),
-home garage gym, training consistently since the June 2026 restart. Cutting on a
-GLP-1 — see `nutrition-strategy.md` for the settled nutrition decisions (1660 kcal /
-198g protein targets, 10am–8pm eating window, and the guardrails around all of it).
-Logs food in MacroFactor; nutrition arrives here via Apple Health.
+Matty. Lifter on **GZCLP: Blacknoir version** in Liftosaur (program `viohtrec`),
+home garage gym. Cutting on a GLP-1 — see `nutrition-strategy.md` for the settled
+decisions (1660 kcal / 198g protein, 10am–8pm window) and don't re-litigate them.
 
-## Context docs — how much to trust them
+## Vocabulary
 
-- `nutrition-strategy.md` — **current** (July 2026). The settled decisions and
-  guardrails hold until Matty says otherwise; don't re-litigate them.
-- `nutrition-tactics.md` — **living notes**, not settled decisions. Practical
-  food/prep tips and patterns noticed from the logs (protein-dense options, what
-  actually separates good vs. bad protein days). Update it freely as we learn
-  more — unlike `nutrition-strategy.md`, nothing in here is locked.
-- `training-strategy.md` — the program decision (GZCLP: Blacknoir, program id
-  `viohtrec`, templates/increments) plus the durable guiding principle: let the
-  linear progression do the work, don't manually jump weights. Trimmed down from
-  the original June 2026 comeback handoff doc once its one-time setup work
-  (fixing inflated starting 1RMs) was done. For current training state — what's
-  next, current weights, T3 exercise selection — trust `fitness.db` and the
-  Liftosaur MCP over this doc; it won't track that.
+**Read `CONTEXT.md` before reasoning about this data.** These terms are precise
+and the schema depends on them:
 
-## Tables (see schema.sql for full DDL)
+- **Observation** — a scalar fact about one Metric on one Observed Day.
+- **Report** — one delivery of an Observation. Several can describe the same day
+  and disagree; the most recent wins.
+- **Observed Day** — the calendar day in `America/Chicago`. Always.
+- **Partial Day** — today. Still accumulating. **Exclude from every average.**
+- **Restatement** — a later Report revising an earlier one. Normal.
 
-| Table | Grain | Notes |
-|---|---|---|
-| `nutrition` | 1 row/day | calories, protein_g, carbs_g, fat_g (from MacroFactor) |
-| `body_metrics` | day × metric | `weight_lbs`, `body_fat_percentage`, ... |
-| `sleep` | 1 row/day | asleep/in-bed minutes, stages_json |
-| `activity` | 1 row/day | steps, active_energy_kcal, exercise_minutes |
-| `workouts` | 1 row/workout | Apple Health workouts: yoga, walking, etc. |
-| `liftosaur_sets` | 1 row/set | full lifting history; reps=0 means a failed set |
-| `sync_log` | 1 row/sync run | freshness + error tracking |
+## Tables and views
 
-## Query patterns
+| Object | What it is |
+|---|---|
+| `observations` | append-only Report log. Raw. Rarely what you want. |
+| `observations_daily` | **current truth** — `last(value, reported_at)` per day/metric |
+| `nutrition` `activity` `body` `sleep` `recovery` | pivots over `observations_daily` |
+| `energy_balance` | intake vs Apple's expenditure — **see the caveat below** |
+| `energy_reality_check` | how far `energy_balance` disagrees with the scale |
+| `weight_trend` / `weight_outliers` | lb/week via regression; bad readings |
+| `lifting_records` / `lifting_sets` | Liftosaur. `reps = 0` is a failed set, not missing. |
+| `health_workouts` | Apple's view of sessions, with energy and duration |
+| `training_sessions` | **reconciled** — use this to count training, not the two above |
+| `data_freshness` | per-source recency |
+| `metric_catalog` | canonical units and an `attention` grade |
 
-Lifting days: `SELECT DISTINCT date FROM liftosaur_sets`.
-Cross-source join example — protein on lifting vs rest days:
+81 metrics exist. Anything not in a view is queryable by name in
+`observations_daily` — `SELECT DISTINCT metric FROM observations_daily`.
 
-```sql
-SELECT CASE WHEN l.date IS NULL THEN 'rest' ELSE 'lift' END AS day_type,
-       ROUND(AVG(n.protein_g)) AS avg_protein
-FROM nutrition n
-LEFT JOIN (SELECT DISTINCT date FROM liftosaur_sets) l ON l.date = n.date
-GROUP BY day_type;
-```
+## Traps
 
-Exercise progression: filter `liftosaur_sets` by exercise name (display names like
-'Bench Press', 'Squat', 'Deadlift', 'Overhead Press'), order by date, look at max
-weight × reps per session.
+- **`energy_balance` overstates the deficit by roughly 2.6×.** Apple's basal
+  figure is a formula estimate and watch active energy runs generous. Always read
+  `energy_reality_check` alongside it, and ignore rows with low `coverage_pct`.
+  Use it for direction; use `weight_trend` for magnitude.
+- **Counting `health_workouts` double-counts lifting** — Apple shadow-copies every
+  Liftosaur session. Use `training_sessions`.
+- **Gaps are not zeros.** An unlogged day is unlogged, not fasted.
+- **Today is partial.** A midday export once made a 1241 kcal day look like 333.
+- **`program` is sometimes an app**, not a program: 1,218 rows say `Hevy`, which
+  is imported history.
+- Sleep has ~7% coverage. It is stored but deliberately unmonitored; don't build
+  conclusions on it.
 
 ## Freshness
 
-Run `make check` before coaching on the data. It reports the newest date per table
-and exits nonzero when the pipeline genuinely isn't delivering. If it flags anything,
-`make sync`, then re-check.
+```bash
+npm run q "SELECT * FROM data_freshness"
+```
 
-**Don't use `sync_log` to judge freshness.** It records whether an ingest *ran*, not
-whether data arrived. In July 2026 it logged `ok` every hour for five days while an
-iOS update had dropped HAE's HealthKit read permission for weight — syncs succeeded,
-no weight came through. `check_freshness.py` splits sources accordingly: `activity`
-and `sleep` are written by the Watch unprompted, so a gap there is always a broken
-pipeline (hard failure), while `nutrition`/`weight`/`workouts` depend on Matty logging
-or weighing in, so a gap warns but may just be travel.
+Any **automatic** source (steps, active/basal energy, exercise minutes) that is
+`stale` or `missing` means the pipeline is broken. User-driven sources only warn —
+that may just be travel.
 
-**Today's row is always a partial day** — HAE exports whatever has been logged so far.
-Exclude it from averages and trends.
-
-Two known failure modes worth recognizing:
-
-- **Phone-side.** HAE stops exporting a metric, or exports empty arrays for it. Fix is
-  on the phone (Settings → Health → Data Access & Devices → Health Auto Export), not
-  in this repo. Compare metrics against each other in
-  `AutoSync/HealthMetrics/<metric>/YYYYMMDD.hae` — a 70-byte file is an empty payload,
-  so one metric empty while its neighbours have data means a permission, not a gap.
-- **Dataless iCloud files.** Exports can sit as metadata-only placeholders that a
-  launchd agent can't materialize, failing with `EDEADLK`. `read_export()` in
-  `ingest_hae.py` handles this via `brctl download`; see its docstring.
+Never judge freshness from `ingest_runs`. It records that a run happened and what
+it found; the failure this system exists to catch is a run that succeeds and
+delivers nothing.
 
 ## Live actions
 
-The **Liftosaur MCP** (`mcp__liftosaur__*`) is still the tool for live things:
-reading/editing the program, checking what's next, adjusting 1RMs. `fitness.db` is the
-analytical history; the MCP is current state. After MCP writes, `make sync-liftosaur`
-refreshes the local copy.
+The **Liftosaur MCP** (`mcp__liftosaur__*`) is still the tool for reading or
+editing the program and adjusting 1RMs. After any write, `npm run sync-liftosaur`.
 
 ## Rules
 
-- Never commit `fitness.db`, `.env`, exports, or logs (gitignored — keep it that way).
-- Ingest is idempotent; re-running any sync is always safe.
-- Python is `/opt/homebrew/bin/python3` (system 3.9 is too old for these scripts).
+- Never commit `fitness.db`, `.env`, `exports/`, or `node_modules` (all gitignored).
+- Ingest is idempotent; re-running any sync or the backfill is always safe.
+- Deploy only to the **personal** Vercel scope — `vercel --prod --scope mattystratton`.

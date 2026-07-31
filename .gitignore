@@ -10,6 +10,13 @@ dropbox/
 *.log
 logs/
 
+# Raw Health Auto Export payloads. These are the rawest health data there is —
+# a full export is ~17MB of weight, body composition, food and sleep.
+HealthAutoExport-*.json
+HealthMetrics-*.json
+WorkoutMetrics-*.json
+*.hae
+
 # OS noise
 .DS_Store
 
@@ -17,3 +24,10 @@ logs/
 __pycache__/
 *.pyc
 .venv/
+
+# Node
+node_modules/
+.next/
+.vercel/
+.vercel
+.env*
