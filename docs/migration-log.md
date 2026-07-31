@@ -196,10 +196,26 @@ Ten years loaded from 87MB of JSON in **2.2 seconds**.
 | Distinct metrics | 81 |
 | Unit anomalies | **0** |
 | Unclassified workout types | **0** |
-| Size before compression | 20 MB |
-| Size after | **3,952 kB** |
-| **Compression ratio** | **11.9×** across 11 chunks (17 MB → 1,456 kB) |
 | Idempotency | second run: identical counts |
+
+### On Tiger Cloud (service `fitness`, 0.5 CPU / 2 GB, us-east-1)
+
+Same load, 7 seconds over the network. Identical counts, zero anomalies, and
+compressed chunks query correctly (1,936 rows read out of the 2017 columnstore chunk).
+
+| | |
+|---|---|
+| Before compression | 13 MB |
+| After | **1,480 kB** across 11 chunks |
+| **Compression ratio** | **8.8×** |
+| `observations` total | 2,480 kB |
+| Whole database | 28 MB |
+
+**Publish 8.8×, not the 11.9× measured locally.** The local figure was inflated by my own
+churn: re-running the idempotent backfill leaves dead tuples, which bulk the uncompressed
+"before" without adding any real data. Tiger Cloud was a single clean load. A neat little
+lesson in accidentally benchmarking your own test loop — and an argument for measuring
+compression on a freshly loaded table, never one you've been iterating against.
 
 Sessions over ten years: **399 cardio, 300 lifting, 60 mobility, 31 other.** The lifting
 app holds 182 of them.
@@ -226,6 +242,23 @@ app holds 182 of them.
    derived from weight trend vs logged intake, is far better calibrated.
 2. **A 343.5 lb reading in 2021** against a 280–300 baseline — and chasing it down was the
    best thing that happened to the schema. See below.
+
+## TLS: a three-minute red herring
+
+`pg` v8 treats `sslmode=require` as `verify-full`, and the first connection failed with
+`SELF_SIGNED_CERT_IN_CHAIN`. The chain showed `ca.timescale.com` self-signing itself,
+which reads like a platform that ships a private CA.
+
+It isn't. Tiger Cloud issues a temporary self-signed cert so a service is usable
+immediately, then swaps in a publicly-signed one behind the scenes. The docs say "usually
+within 30 minutes"; it took **3.5 minutes**, and by the time I'd finished diagnosing it
+the issuer was already Google Trust Services and `verify-full` just worked.
+
+Worth a line in the post as an anti-lesson: the instinct on a TLS error is to reach for
+`rejectUnauthorized: false`, and on a database holding personal health data that would
+have been a permanent hole punched to work around a condition that resolved itself before
+the investigation finished. Also note `libpq` needs `PGSSLROOTCERT` pointed at a CA bundle
+on macOS where Node just works — psql and Node disagree about what "verify" means.
 
 ## The outlier that found a missing column
 
@@ -268,9 +301,10 @@ Three lessons, all of which belong in the post:
 
 ## Numbers to re-measure before publishing
 
-- [ ] Compression ratio via `hypertable_compression_stats('observations')`, before/after,
-      stated honestly — including that it compresses well *partly because* it stores
-      restatements.
+- [x] Compression: **8.8×** on Tiger Cloud, clean load. Note honestly that the backfill
+      contains no Restatements at all (each year file covers a distinct range), so this
+      ratio reflects genuine columnar compression of tall/narrow data rather than
+      deduplicated repetition. Re-measure once live pushes have accumulated restatements.
 - [ ] Final row counts after backfill (the 56,402 figure is from the export scan, not
       from loaded rows).
 - [ ] Lines of code deleted at cutover (estimated ~150 for the iCloud/launchd machinery
