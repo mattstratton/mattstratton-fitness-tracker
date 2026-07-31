@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { requireBearer } from '../lib/http.ts'
+import { requireBearer } from '../lib/http.js'
 
 function req(auth?: string): Request {
   return new Request('https://example.test/api/hae', {

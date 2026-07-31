@@ -14,7 +14,7 @@
 // Reads SQLite with node:sqlite, in core since Node 22. No dependency.
 import { DatabaseSync } from 'node:sqlite'
 
-import { makePool } from '../lib/db.ts'
+import { makePool } from '../lib/db.js'
 
 const SQLITE_PATH = process.argv[2] ?? 'fitness.db'
 const TOLERANCE = 0.01

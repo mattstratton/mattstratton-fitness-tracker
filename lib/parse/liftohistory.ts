@@ -10,8 +10,8 @@
 // genuine failure.
 import { createHash } from 'node:crypto'
 
-import { KG_TO_LBS, localDay, parseInstant } from '../domain.ts'
-import type { LiftingRecord, LiftingSet } from '../domain.ts'
+import { KG_TO_LBS, localDay, parseInstant } from '../domain.js'
+import type { LiftingRecord, LiftingSet } from '../domain.js'
 
 // "3x5 215lb", "1x13 88.75lb", "2x5 60kg @8", "3x12" (bodyweight)
 const SET_GROUP_RE = /^(\d+)x(\d+)(?:\s+([\d.]+)\s*(lb|kg))?(?:\s+@[\d.]+)?$/

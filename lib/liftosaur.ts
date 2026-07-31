@@ -6,8 +6,8 @@
 // Instead each record's text is hashed and only changed records are rewritten.
 import type pg from 'pg'
 
-import { parseRecord } from './parse/liftohistory.ts'
-import type { LiftosaurRecord } from './parse/liftohistory.ts'
+import { parseRecord } from './parse/liftohistory.js'
+import type { LiftosaurRecord } from './parse/liftohistory.js'
 
 const API_BASE = 'https://www.liftosaur.com/api/v1'
 const PAGE_SIZE = 200

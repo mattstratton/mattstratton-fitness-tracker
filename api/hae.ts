@@ -5,11 +5,11 @@
 //
 // Replaces the entire iCloud pipeline: no files, no launchd, no brctl, no mtime
 // ordering, and no laptop. See docs/adr/0004.
-import { getPool } from '../lib/db.ts'
-import { json, requireBearer } from '../lib/http.ts'
-import { writeObservations, writeWorkouts } from '../lib/ingest.ts'
-import { logIngestRun } from '../lib/liftosaur.ts'
-import { parseHaePayload } from '../lib/parse/hae.ts'
+import { getPool } from '../lib/db.js'
+import { json, requireBearer } from '../lib/http.js'
+import { writeObservations, writeWorkouts } from '../lib/ingest.js'
+import { logIngestRun } from '../lib/liftosaur.js'
+import { parseHaePayload } from '../lib/parse/hae.js'
 
 // Non-framework Vercel Functions export a default object with `fetch`, and
 // dispatch on the method themselves. Named GET/POST exports are a Next.js

@@ -6,7 +6,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { parseHaePayload } from '../lib/parse/hae.ts'
+import { parseHaePayload } from '../lib/parse/hae.js'
 
 const EXPORT_DIR = process.argv[2] ?? 'exports'
 

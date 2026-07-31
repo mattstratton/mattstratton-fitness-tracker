@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { parseHaePayload } from '../lib/parse/hae.ts'
+import { parseHaePayload } from '../lib/parse/hae.js'
 
 const REPORTED_AT = new Date('2026-07-31T12:00:00Z')
 

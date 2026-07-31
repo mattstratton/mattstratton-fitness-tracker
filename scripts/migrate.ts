@@ -8,7 +8,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { makePool } from '../lib/db.ts'
+import { makePool } from '../lib/db.js'
 
 const DIR = 'db/migrations'
 const pool = makePool()

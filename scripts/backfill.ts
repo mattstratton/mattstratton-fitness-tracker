@@ -14,9 +14,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { makePool } from '../lib/db.ts'
-import { writeObservations, writeWorkouts } from '../lib/ingest.ts'
-import { parseHaePayload } from '../lib/parse/hae.ts'
+import { makePool } from '../lib/db.js'
+import { writeObservations, writeWorkouts } from '../lib/ingest.js'
+import { parseHaePayload } from '../lib/parse/hae.js'
 
 const EXPORT_DIR = process.argv[2] ?? 'exports'
 const pool = makePool()

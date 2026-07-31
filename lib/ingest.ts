@@ -3,7 +3,7 @@
 // be hollow if the two wrote rows differently.
 import type pg from 'pg'
 
-import type { HealthWorkout, Observation } from './domain.ts'
+import type { HealthWorkout, Observation } from './domain.js'
 
 const BATCH = 2000
 

@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { parseTarget, parseSets, parseRecord } from '../lib/parse/liftohistory.ts'
+import { parseTarget, parseSets, parseRecord } from '../lib/parse/liftohistory.js'
 
 test('parseTarget expands groups and flags the AMRAP set', () => {
   assert.deepEqual(parseTarget('2x5 215lb, 1x5+ 215lb'), [

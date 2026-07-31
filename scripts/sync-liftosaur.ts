@@ -4,8 +4,8 @@
 //
 // Thin wrapper: the logic lives in lib/liftosaur.ts so the Vercel cron runs
 // exactly the same code path.
-import { loadEnv, makePool } from '../lib/db.ts'
-import { logIngestRun, syncLiftosaur } from '../lib/liftosaur.ts'
+import { loadEnv, makePool } from '../lib/db.js'
+import { logIngestRun, syncLiftosaur } from '../lib/liftosaur.js'
 
 loadEnv()
 const apiKey = process.env['LIFTOSAUR_API_KEY']

@@ -2,9 +2,9 @@
 //
 // Liftosaur is a pull, not a push, so it needs a scheduler. This is the only
 // piece of the old launchd agent that survives, and it survives as a cron.
-import { getPool } from '../../lib/db.ts'
-import { json, requireBearer } from '../../lib/http.ts'
-import { logIngestRun, syncLiftosaur } from '../../lib/liftosaur.ts'
+import { getPool } from '../../lib/db.js'
+import { json, requireBearer } from '../../lib/http.js'
+import { logIngestRun, syncLiftosaur } from '../../lib/liftosaur.js'
 
 export default { fetch: handle }
 

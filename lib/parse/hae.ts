@@ -6,8 +6,8 @@
 //
 // Some exports omit the "data" wrapper; automation config files reuse the same
 // filename pattern but list metric names as bare strings. Both are handled.
-import { KG_TO_LBS, parseInstant } from '../domain.ts'
-import type { HealthWorkout, Observation } from '../domain.ts'
+import { KG_TO_LBS, parseInstant } from '../domain.js'
+import type { HealthWorkout, Observation } from '../domain.js'
 
 /**
  * HAE name -> canonical name. RENAMES ONLY: anything absent passes through

@@ -155,11 +155,21 @@ The honest list. Most of these are better story beats than the things that went 
 - **The parser emits more rows than the source has points**: 56,402 points → **68,858
   observations**, because `heart_rate` fans out to min/max/avg and `sleep_analysis` to
   six stage metrics. Worth stating carefully in the post so the numbers reconcile.
-- **Zero third-party dev dependencies.** Node 26 ships native TypeScript stripping,
-  `node:test`, and `node:sqlite` in core — so the port needed no tsx, no ts-node, no
-  jest, and reads `fitness.db` for the oracle diff with nothing installed. One runtime
-  dependency (`pg`). Pleasing continuity with the Python version, which was stdlib-only
-  and hand-rolled its own `.env` parser.
+- **Zero dev dependencies lasted right up until deployment.** Node 26 ships native
+  TypeScript stripping, `node:test` and `node:sqlite` in core, so the whole port ran with
+  only `pg` installed — pleasing continuity with the stdlib-only Python it replaced. Then
+  Vercel killed it, and the reason is a genuinely interesting incompatibility:
+  - Node's native TS runner **requires** `.ts` in relative import specifiers. `./dep.js`
+    and `./dep` both fail. (Tested all three.)
+  - Vercel **transpiles** `.ts` to `.js` but does not rewrite specifiers, so
+    `api/hae.js` shipped asking for `lib/db.ts`, which no longer existed:
+    `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/lib/db.ts'`.
+
+  Two correct-looking toolchains with exactly opposite requirements, and no
+  configuration that satisfies both. Resolved by using `.js` specifiers (which match
+  Vercel's output) and adding `tsx` to run them locally. One dev dependency, and the code
+  is now portable to any TS toolchain instead of depending on a Node-version-specific
+  behaviour. Worth telling honestly rather than quietly dropping the zero-dep claim.
 
 ---
 

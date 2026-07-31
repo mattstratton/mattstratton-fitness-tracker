@@ -6,10 +6,13 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "test": "node --test \"tests/**/*.test.ts\"",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "backfill": "node scripts/backfill.ts",
-    "migrate": "node scripts/migrate.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "migrate": "tsx scripts/migrate.ts",
+    "sync-liftosaur": "tsx scripts/sync-liftosaur.ts",
+    "diff-oracle": "tsx scripts/diff-oracle.ts",
+    "scan-exports": "tsx scripts/scan-exports.ts"
   },
   "dependencies": {
     "pg": "^8.13.1"
@@ -17,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2"
   }
 }

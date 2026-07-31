@@ -6,8 +6,8 @@
 // about data recency and never looks at run status.
 //
 // Also reachable by hand for a quick check, which is what replaces `make check`.
-import { getPool } from '../../lib/db.ts'
-import { json, requireBearer } from '../../lib/http.ts'
+import { getPool } from '../../lib/db.js'
+import { json, requireBearer } from '../../lib/http.js'
 
 type FreshnessRow = {
   label: string

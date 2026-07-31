@@ -8,9 +8,6 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noEmit": true,
-    // Node executes these .ts files directly and requires the extension in the
-    // import specifier; tsc rejects that unless explicitly allowed.
-    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["node"],
     // Node strips types at runtime rather than compiling, so syntax that needs
@@ -18,5 +15,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+  "include": ["api/**/*.ts", "lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
 }
