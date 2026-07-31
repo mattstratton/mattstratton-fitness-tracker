@@ -118,6 +118,20 @@ The honest list. Most of these are better story beats than the things that went 
    *daily*, not hourly (the hourly figure was the old pipeline polling a static file), so
    the row saving was illusory and would have bought a read-before-write on every point.
 
+8. **Assumed "lifting" meant one string.** The first `training_sessions` view hardcoded
+   `'Traditional Strength Training'`. Parsing ten years of real workouts found **20
+   distinct types**, of which `Functional Strength Training` (47 sessions) is also
+   lifting and was being misfiled as "other" — and **285 Indoor Cycling** sessions made a
+   binary lifting/not-lifting split useless anyway. Replaced with a `workout_types`
+   lookup table plus an `unclassified_workout_types` view so the next unseen type gets
+   noticed instead of silently defaulting forever. *Every hardcoded string in this
+   migration that met real data turned out to be an assumption.*
+
+9. **Nearly reported a clean typecheck that wasn't.** `npx tsc --noEmit | tail -20 && echo
+   CLEAN` chains off `tail`'s exit code, not `tsc`'s, so it printed CLEAN over five
+   visible errors. Check exit codes explicitly. Not a migration lesson, but a good
+   reminder that "the command printed something reassuring" is not verification.
+
 ---
 
 ## Measured surprises
@@ -135,6 +149,17 @@ The honest list. Most of these are better story beats than the things that went 
 - HealthKit has been quietly recording **toothbrushing** (3 points) and **handwashing**
   (18). Under the new model they land for free and nobody looks at them, which is exactly
   right.
+- **Apple knows about 4.4× more training than Liftosaur does.** 806 Apple workouts back
+  to 2016 versus 182 Liftosaur sessions from 2024. The lifting app everyone thinks of as
+  the training record holds less than a quarter of the training history.
+- **The parser emits more rows than the source has points**: 56,402 points → **68,858
+  observations**, because `heart_rate` fans out to min/max/avg and `sleep_analysis` to
+  six stage metrics. Worth stating carefully in the post so the numbers reconcile.
+- **Zero third-party dev dependencies.** Node 26 ships native TypeScript stripping,
+  `node:test`, and `node:sqlite` in core — so the port needed no tsx, no ts-node, no
+  jest, and reads `fitness.db` for the oracle diff with nothing installed. One runtime
+  dependency (`pg`). Pleasing continuity with the Python version, which was stdlib-only
+  and hand-rolled its own `.env` parser.
 
 ---
 

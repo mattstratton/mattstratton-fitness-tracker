@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true,
+    // Node executes these .ts files directly and requires the extension in the
+    // import specifier; tsc rejects that unless explicitly allowed.
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    // Node strips types at runtime rather than compiling, so syntax that needs
+    // a real emit step (enums, namespaces, parameter properties) is banned.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+}
