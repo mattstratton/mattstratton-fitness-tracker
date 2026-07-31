@@ -93,4 +93,4 @@ Never read a single implausibly low day as real without checking whether it's th
 newest date in `nutrition`. Today's row is always a partial day, because HAE exports
 whatever has been logged at the moment it runs. On 7/31 this made 7/30 look like a
 333 kcal / 23g-protein fast that Matty deadlifted through; the real day was 1241 kcal
-and 175g, one of his better ones. `make check` labels the partial day explicitly.
+and 175g, one of his better ones. `data_freshness` labels the partial day explicitly.

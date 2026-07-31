@@ -5,7 +5,8 @@
 // Every run genuinely succeeded and genuinely delivered nothing. So this asks
 // about data recency and never looks at run status.
 //
-// Also reachable by hand for a quick check, which is what replaces `make check`.
+// Also reachable by hand, and `npm run q "SELECT * FROM data_freshness"` does
+// the same locally.
 import { getPool } from '../../lib/db.js'
 import { json, requireBearer } from '../../lib/http.js'
 
