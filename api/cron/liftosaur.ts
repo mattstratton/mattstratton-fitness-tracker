@@ -6,9 +6,10 @@ import { getPool } from '../../lib/db.ts'
 import { json, requireBearer } from '../../lib/http.ts'
 import { logIngestRun, syncLiftosaur } from '../../lib/liftosaur.ts'
 
-export const config = { maxDuration: 60 }
+export default { fetch: handle }
 
-export async function GET(request: Request): Promise<Response> {
+export async function handle(request: Request): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405)
   // Vercel sends `Authorization: Bearer $CRON_SECRET` on scheduled invocations.
   // Without this the route is a public URL that hammers the Liftosaur API.
   const denied = requireBearer(request, 'CRON_SECRET')

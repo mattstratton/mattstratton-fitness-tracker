@@ -18,7 +18,10 @@ type FreshnessRow = {
   max_age_days: number
 }
 
-export async function GET(request: Request): Promise<Response> {
+export default { fetch: handle }
+
+export async function handle(request: Request): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405)
   const denied = requireBearer(request, 'CRON_SECRET')
   if (denied) return denied
 

@@ -11,9 +11,15 @@ import { writeObservations, writeWorkouts } from '../lib/ingest.ts'
 import { logIngestRun } from '../lib/liftosaur.ts'
 import { parseHaePayload } from '../lib/parse/hae.ts'
 
-export const config = { maxDuration: 60 }
+// Non-framework Vercel Functions export a default object with `fetch`, and
+// dispatch on the method themselves. Named GET/POST exports are a Next.js
+// convention and do not apply here. maxDuration lives in vercel.json.
+export default { fetch: handle }
 
-export async function POST(request: Request): Promise<Response> {
+export async function handle(request: Request): Promise<Response> {
+  if (request.method !== 'POST') {
+    return json({ error: 'method not allowed' }, 405)
+  }
   const denied = requireBearer(request, 'HAE_INGEST_TOKEN')
   if (denied) return denied
 
