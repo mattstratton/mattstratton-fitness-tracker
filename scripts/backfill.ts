@@ -15,54 +15,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { makePool } from '../lib/db.ts'
+import { writeObservations, writeWorkouts } from '../lib/ingest.ts'
 import { parseHaePayload } from '../lib/parse/hae.ts'
-import type { HealthWorkout, Observation } from '../lib/domain.ts'
 
 const EXPORT_DIR = process.argv[2] ?? 'exports'
-const BATCH = 2000
-
 const pool = makePool()
-
-async function insertObservations(rows: Observation[]): Promise<void> {
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const chunk = rows.slice(i, i + BATCH)
-    const values: unknown[] = []
-    const tuples = chunk.map((o, n) => {
-      values.push(o.observedOn, o.metric, o.value, o.unit, o.source, o.recordedBy, o.reportedAt)
-      const b = n * 7
-      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7})`
-    })
-    await pool.query(
-      `INSERT INTO observations (observed_on, metric, value, unit, source, recorded_by, reported_at)
-       VALUES ${tuples.join(',')}`,
-      values,
-    )
-  }
-}
-
-async function upsertWorkouts(rows: HealthWorkout[]): Promise<void> {
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const chunk = rows.slice(i, i + BATCH)
-    const values: unknown[] = []
-    const tuples = chunk.map((w, n) => {
-      values.push(w.startedAt, w.type, w.endedAt, w.durationMin, w.energyKcal)
-      const b = n * 5
-      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5})`
-    })
-    // Workouts DO have a natural key, unlike observations, so re-running just
-    // refreshes them. This is also what collapses the same session exported
-    // under two timezone offsets -- no _utc_key helper required.
-    await pool.query(
-      `INSERT INTO health_workouts (started_at, type, ended_at, duration_min, energy_kcal)
-       VALUES ${tuples.join(',')}
-       ON CONFLICT (started_at, type) DO UPDATE SET
-         ended_at = excluded.ended_at,
-         duration_min = excluded.duration_min,
-         energy_kcal = excluded.energy_kcal`,
-      values,
-    )
-  }
-}
 
 const files = readdirSync(EXPORT_DIR).filter((f) => f.endsWith('.json')).sort()
 if (files.length === 0) {
@@ -93,25 +50,37 @@ for (const file of files) {
        WHERE source = 'hae_backfill' AND observed_on BETWEEN $1 AND $2`,
       [from, to],
     )
-    await insertObservations(observations)
+    await writeObservations(pool, observations)
     console.log(
       `${file.padEnd(46)} ${from}..${to}  +${observations.length} obs` +
         (cleared.rowCount ? ` (cleared ${cleared.rowCount})` : ''),
     )
   }
 
-  if (workouts.length > 0) await upsertWorkouts(workouts)
+  if (workouts.length > 0) await writeWorkouts(pool, workouts)
   totalObs += observations.length
   totalWorkouts += workouts.length
 }
 
 console.log(`\nloaded ${totalObs.toLocaleString()} observations, ${totalWorkouts.toLocaleString()} workouts`)
 
-// The continuous aggregate only materialises on its schedule, so force it now;
-// otherwise the first verification query reads through real-time aggregation
-// and tells you nothing about whether materialisation works.
-console.log('refreshing observations_daily...')
-await pool.query(`CALL refresh_continuous_aggregate('observations_daily', NULL, NULL)`)
+// Materialise everything EXCEPT today, deliberately.
+//
+// Refreshing with (NULL, NULL) materialises today's bucket too -- and once a
+// bucket is materialised, real-time aggregation stops consulting raw rows for
+// it. Any Report arriving later that day then stays invisible until the next
+// scheduled refresh, so a push at 08:00 would not reach a query at 08:05. Today
+// is precisely the day a Restatement is most likely and most consequential.
+//
+// Leaving today unmaterialised lets real-time aggregation serve it live from
+// raw rows, always current. The scheduled policy has the same boundary: a bucket
+// ending at midnight tonight is never "older than end_offset", so the policy
+// alone would never have materialised it either. This call was the only thing
+// that did.
+console.log('refreshing observations_daily (all buckets before today)...')
+await pool.query(
+  `CALL refresh_continuous_aggregate('observations_daily', NULL, today_local())`,
+)
 
 const { rows } = await pool.query<{ label: string; n: string }>(`
   SELECT 'observations' AS label, count(*)::text AS n FROM observations
