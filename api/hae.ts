@@ -54,7 +54,11 @@ export async function handle(request: Request): Promise<Response> {
     await logIngestRun(
       pool, 'hae', reportedAt, 'ok',
       { observations: observations.length, workouts: workouts.length, uncatalogued },
-      observations.length, metrics.size,
+      // Count workouts too. HAE splits its exports by data type, so a workouts
+      // automation posts a payload with no `metrics` key at all -- logging
+      // rows_written: 0 for it would make a successful run look like the
+      // delivered-nothing failure this table exists to expose.
+      observations.length + workouts.length, metrics.size,
     )
 
     return json({
