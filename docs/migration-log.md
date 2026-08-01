@@ -414,6 +414,131 @@ server instead of reading the matcher. Pair it with the sleep-stage unit bug and
 the `inBed: 0` regression and there's a clear through-line for the writeup —
 **everything real in this project was found by running it, not by reading it.**
 
+## TimescaleDB, specifically
+
+The time-series lessons, pulled together — these are scattered above in the order
+they happened, but for a post about migrating to Timescale they are the spine.
+
+### 1. `segment_by` is a density decision, and the obvious answer was wrong
+
+`metric` looks like the textbook segment key for a tall/narrow EAV table. Measured
+against 56k real rows and 74 metrics, a yearly chunk averages **~69 rows per
+metric** — 139 in the densest year, single digits for micronutrients — against a
+guideline of >100 per segment value per chunk. Segmenting would have produced
+dozens of near-empty compression batches and compressed *worse*.
+
+Dropped it entirely and put `metric` in `orderby` instead, where Timescale
+auto-creates minmax **and** firstlast sparse indexes, preserving batch exclusion
+for `WHERE metric = …` without the near-empty segments. Confirmed in
+`timescaledb_information.hypertable_columnstore_settings`.
+
+**Lesson: compute rows-per-segment-value-per-chunk from your actual data before
+choosing. The tall/narrow shape that suggests a segment key can be exactly the
+one that can't support it.**
+
+### 2. Chunk interval was decided by write semantics, not by size
+
+The size guidance (chunks in ~25% of memory) is irrelevant at 56k rows —
+everything fits. What actually decided it: **HAE restates a day for about a week
+afterwards.** Yearly chunks keep that entire restatement window inside the
+current uncompressed chunk, so a revision never has to decompress anything.
+Quarterly chunks would have put late restatements of a previous quarter into
+already-compressed data.
+
+**Lesson: if your source revises history, size chunks so the revision window
+fits inside the uncompressed one.**
+
+### 3. Compression: 8.8×, and beware benchmarking your own churn
+
+13MB → 1,480kB across 11 chunks on Tiger Cloud. Locally it measured **11.9×**,
+which was wrong — re-running the idempotent backfill left dead tuples that
+bulked the uncompressed "before" without adding data. I was benchmarking my test
+loop.
+
+Also worth stating honestly in the post: the backfill contains **no
+restatements** (each year file covers a distinct range), so 8.8× is genuine
+columnar compression of tall/narrow data, not deduplicated repetition. Re-measure
+once live pushes accumulate restatements.
+
+### 4. `enable_columnstore` auto-creates a policy
+
+TimescaleDB 2.23+ creates a 7-day columnstore policy the moment you set
+`tsdb.enable_columnstore`. Adding your own then errors. You need
+`remove_columnstore_policy` first. The skill docs said so and I skimmed past it.
+
+### 5. A continuous aggregate cannot be created inside a transaction
+
+The migration runner wrapped everything in `BEGIN`/`COMMIT`, which is correct for
+every other migration and fatal for this one. Needed `WITH NO DATA` plus an
+explicit `migrate:no-transaction` opt-out marker, with the backfill materialising
+afterwards — which is faster anyway.
+
+### 6. The watermark bug — the big one, and it bit twice
+
+**Symptom:** MacroFactor said 1556 kcal; the site said 688. HAE was fine. The raw
+Report log had 1556 pushed at 21:05; `observations_daily` served 688 materialised
+at 16:10.
+
+**Mechanism:** real-time aggregation unions materialised data with raw rows
+*newer than the watermark*. Once a bucket is materialised, raw rows for it are
+never consulted again until an explicit refresh. So a Report arriving later the
+same day is **invisible**, and the view confidently serves a stale number.
+
+I diagnosed and "fixed" this twice, and only understood it the second time:
+
+- **First**: blamed entirely on the backfill calling
+  `refresh_continuous_aggregate(cagg, NULL, NULL)`, which materialises *every*
+  bucket including today. That was a real cause. Fixed by refreshing only up to
+  `today_local()`.
+- **But**: refreshing a narrower window does **not** move the watermark
+  backwards. Today stayed materialised, and the only way to clear it was to
+  rebuild the aggregate.
+- **Second**: it recurred anyway, because the hourly policy's
+  `end_offset => INTERVAL '1 hour'` **also** materialises the current day's
+  bucket. My reasoning — "a bucket ending at midnight tonight can never be older
+  than now minus an hour" — was simply wrong. The watermark had advanced to
+  tomorrow's date.
+
+**Final fix, deliberately belt and braces:** `end_offset` widened to 2 days so
+the current day is never a refresh candidate, *and* the application reads today
+directly from the raw log via `DISTINCT ON … ORDER BY reported_at DESC` — which
+is exactly what `last(value, reported_at)` computes. "Today is correct" was too
+important to rest on a rule I had misjudged twice, and reading raw makes it true
+by construction rather than by reasoning.
+
+**Lessons, and this is the section of the post I'd actually write:**
+- Real-time aggregation is not "always fresh". It is "fresh past the watermark".
+- The watermark only moves forward. A narrower refresh will not undo a wide one.
+- `end_offset` must comfortably exceed one bucket, or your newest bucket
+  silently freezes.
+- For the one value users look at most — today — consider reading raw and
+  skipping the question entirely.
+
+**And the meta-lesson:** the append-only design is what made this diagnosable.
+Both Reports were sitting in the log with timestamps, so the diagnosis was one
+query. Under the old upsert schema the 688 would have overwritten nothing,
+left no trace, and produced a wrong number with no way to tell.
+
+## The web app: more of the same theme
+
+- **The rule that was right and the fixture that wasn't.** Recovery baselines in
+  tests used identical values, so SD was 0 and the rule silently reported
+  "markers normal" while unable to judge anything. Now returns `unknown` — flat
+  physiological data means something is broken upstream, not that recovery is
+  perfect.
+- **A false positive only real data could show.** Stalling flagged "Triceps
+  Pushdown at 40lb". T3 accessories are *meant* to park at one weight; GZCLP only
+  bumps them once the AMRAP clears 18 reps. Reporting that weekly is how a real
+  T1 stall gets ignored. The fix needed tier — which isn't in the database,
+  because the old `tier` column was NULL in all 2,416 rows and got dropped. It
+  lives in the program, which is its right home.
+- **The hardcoded assumption that wasn't the program.** Protein target 198g and a
+  1.5 lb/week threshold were baked into the signals. A program change is
+  deliberate and obvious; drifting from a cut to maintenance is gradual, and the
+  rules would have kept confidently grading against a cut for months. Now
+  phase-aware: the same −1.2 lb/week is `ok` on a cut and "going the wrong way"
+  on a bulk.
+
 ## Numbers to re-measure before publishing
 
 - [x] Compression: **8.8×** on Tiger Cloud, clean load. Note honestly that the backfill
