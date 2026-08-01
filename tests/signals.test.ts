@@ -287,3 +287,23 @@ test('lifting: a T1 stall is still reported when tiers are known', () => {
   ]
   assert.equal(stalling(t1sets, parseTiers(PROGRAM)).status, 'act')
 })
+
+test('tiers: a non-GZCL program yields nothing, and nothing breaks', () => {
+  // Verified against Matty's real 5/3/1 BBB program, which has no t1:/t2:/t3:
+  // labels at all and parses to zero entries. The tier map is a HINT: absent it,
+  // stalling judges every exercise, which is exactly its behaviour before tiers
+  // existed. Changing programs must degrade, never explode.
+  const fiveThreeOne = [
+    'Squat / 1x5 65%, 1x5 75%, 1x5+ 85% / progress: custom(increase: 10lb)',
+    'Squat, Barbell / 5x10 50% / progress: custom(increase: 5lb)',
+  ].join('\n')
+  assert.equal(parseTiers(fiveThreeOne).size, 0)
+
+  const sets = [
+    set({ recordId: 1, reps: 3, exercise: 'Squat', weightLbs: 215 }),
+    set({ recordId: 2, reps: 3, exercise: 'Squat', weightLbs: 215 }),
+  ]
+  // Same verdict with an empty map as with no map at all.
+  assert.equal(stalling(sets, parseTiers(fiveThreeOne)).status, 'act')
+  assert.equal(stalling(sets).status, 'act')
+})

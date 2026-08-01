@@ -12,6 +12,19 @@
  * Pushdown stalled" every single week.
  *
  * Pure function over program text, so it stays testable without the network.
+ *
+ * DURABILITY: this is GZCL-family specific and it is deliberately a HINT, not a
+ * dependency. A program without t1:/t2:/t3: labels -- 5/3/1, PPL, anything --
+ * parses to an empty map, and every consumer treats that as "no information"
+ * rather than an error. Verified against a real 5/3/1 program: zero entries, and
+ * `stalling` reverts to judging every exercise, which is what it did before
+ * tiers existed. Changing programs degrades the T3 suppression; it breaks
+ * nothing.
+ *
+ * The program-agnostic replacement is to ask Liftosaur, via `run_playground`,
+ * what weight it prescribes next: a stall is then "the program wants more weight
+ * and history says it hasn't moved", which holds for any progression scheme.
+ * That is Phase 4 work and it retires this file.
  */
 export type Tier = 't1' | 't2' | 't3'
 
