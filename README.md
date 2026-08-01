@@ -26,12 +26,30 @@ Liftosaur REST API ◄── GET /api/cron/liftosaur (daily)
                                           ▼
                               Tiger Cloud (TimescaleDB)
                                           │
-                                          ▼
-                         `npm run q` / the /coach skill
+                        ┌─────────────────┴─────────────────┐
+                        ▼                                   ▼
+          fitness.mattstratton.com                  `npm run q`
+          (Next.js on Vercel)                       / the /coach skill
 ```
 
 No files, no iCloud, no laptop. The Mac is not infrastructure —
 [docs/adr/0004](docs/adr/0004-hae-pushes-to-an-api.md).
+
+## The app
+
+**https://fitness.mattstratton.com** — Google sign-in, allowlisted to one address.
+
+- **today** — what's logged so far, then anything needing attention
+- **coach** — every signal with its reasoning
+- **trends** — charts over 30/90/365 days
+
+The coaching is deterministic: protein adherence, deficit-vs-scale, weight trend,
+overreaching, stalled lifts, freshness. Each is a pure function in
+`lib/signals/`, unit-tested against fixtures, so a verdict can be traced to a
+rule rather than a vibe. No LLM involved.
+
+It exists because the `/coach` skill can't run on Claude iOS, so coaching on a
+phone — which is where the question actually gets asked — had no other route.
 
 ## Reading the data
 

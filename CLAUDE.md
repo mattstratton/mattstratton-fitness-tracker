@@ -79,6 +79,40 @@ Never judge freshness from `ingest_runs`. It records that a run happened and wha
 it found; the failure this system exists to catch is a run that succeeds and
 delivers nothing.
 
+## The web app
+
+A Next.js app at **https://fitness.mattstratton.com**, deployed from `main` on
+push (personal Vercel scope `mattystratton` — never TigerData's).
+
+| Path | What |
+|---|---|
+| `app/page.tsx` | glance: today's tiles, then signals needing attention |
+| `app/coach/page.tsx` | every signal with its reasoning |
+| `app/trends/page.tsx` | charts, 30/90/365d |
+| `app/api/hae/route.ts` | HAE's push endpoint (bearer token) |
+| `app/api/cron/*` | daily Liftosaur sync and freshness check |
+| `lib/signals/` | the coaching rules — **pure functions, fixture-tested** |
+| `lib/queries.ts` | the only place with SQL for the pages |
+
+It exists because `/coach` can't run on Claude iOS (enterprise config blocks the
+Liftosaur MCP), so coaching on a phone had no other route.
+
+**Rules for changing it:**
+
+- Signals stay **pure**. No SQL, no fetch, no clock reads inside a rule — that's
+  what makes them fixture-testable and reusable as LLM tools later. Fetching
+  belongs in `lib/queries.ts`.
+- Signals return `unknown` when there isn't enough data. Never collapse that into
+  `ok`; this dataset produces it constantly.
+- **Today is read from raw `observations`, not `observations_daily`.** The
+  continuous aggregate stops consulting raw rows once it materialises a bucket,
+  which served a stale 688 kcal against a real 1556. See `lib/queries.ts`.
+- Charts never interpolate across gaps and tiles never show 0 for unlogged.
+- Auth: `lib/allowlist.ts` is the security boundary. `proxy.ts` guards the UI and
+  deliberately excludes `/api` so HAE and the crons work.
+
+`npm run dev` locally; `npm test` and `npm run typecheck` before pushing.
+
 ## Record what we learn — this is not optional
 
 `docs/migration-log.md` is raw material for a writeup and it is **part of the
