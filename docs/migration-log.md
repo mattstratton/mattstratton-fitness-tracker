@@ -539,6 +539,34 @@ left no trace, and produced a wrong number with no way to tell.
   phase-aware: the same −1.2 lb/week is `ok` on a cut and "going the wrong way"
   on a bulk.
 
+## Verifying that a tool exists is not verifying that it works
+
+Phase 0 of the web app was explicitly about resolving unknowns before building on
+them, and the headline finding was that Liftosaur's MCP could tell us the next
+workout via `run_playground`. That was recorded as "RESOLVED, best case", and the
+open question about whether to hardcode GZCLP was closed on the strength of it.
+
+It doesn't work. Every argument shape returns `exercises: {}` — an empty workout
+— while the same response's `stats` block correctly reports that Day 3 has 15
+working sets. So the tool parses the program perfectly and simply doesn't emit
+the simulated session.
+
+What actually got verified in Phase 0 was that the endpoint answered, the tool
+was listed, and a call returned a 200 with plausible-looking JSON. Nobody checked
+the part that mattered. Same failure as `export { auth as middleware }` attaching
+a session and protecting nothing, and the `tsconfig` that typechecked everything
+except the three files that broke the deploy — and I did this one *while writing
+up the other two*.
+
+**The lesson, sharpened: "I called it and got a response" is not verification.
+Verification is asserting on the specific field you intend to depend on.** A
+Phase 0 whose job is de-risking has to end in an assertion, not an impression.
+
+The fallback is fine — derive the next session from the program text (`## Day N`
+blocks, which carry current weights) plus the last `dayName` in history. It just
+isn't the elegant thing that was promised, and the decision to skip hardcoding
+GZCLP now rests on a different, weaker foundation than the one recorded.
+
 ## Numbers to re-measure before publishing
 
 - [x] Compression: **8.8×** on Tiger Cloud, clean load. Note honestly that the backfill
