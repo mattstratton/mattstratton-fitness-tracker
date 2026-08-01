@@ -1,4 +1,7 @@
-export { auth as middleware } from './auth.js'
+// Next 16 renamed the `middleware` file convention to `proxy` -- same
+// behaviour, clearer name, since it runs at a network boundary in front of the
+// app rather than being Express-style middleware.
+export { auth as proxy } from './auth.js'
 
 export const config = {
   // Guard the UI, never the machine endpoints.
