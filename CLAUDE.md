@@ -79,6 +79,42 @@ Never judge freshness from `ingest_runs`. It records that a run happened and wha
 it found; the failure this system exists to catch is a run that succeeds and
 delivers nothing.
 
+## Record what we learn — this is not optional
+
+`docs/migration-log.md` is raw material for a writeup and it is **part of the
+work, not a nice-to-have**. Update it in the same change that produced the
+finding, never in a batch at the end. Findings evaporate: the numbers get
+re-measured, the wrong assumption gets fixed and forgotten, and six weeks later
+only the final state survives — which is the least interesting version.
+
+**Write an entry whenever any of these happen:**
+
+- A wrong assumption is corrected — *especially* one that looked right. Record
+  what was assumed, what the data said, and how it was caught.
+- Real data breaks something synthetic data or a passing test did not.
+- A measured number lands (compression ratio, row counts, coverage, timings).
+  Include how it was measured; a figure without its method can't be re-checked.
+- Something is configured that appears correct and does nothing. This project has
+  produced several and they are the best material in the log.
+- A platform behaves differently from its documentation, or from a reasonable
+  reading of it.
+
+**Keep the three destinations distinct:**
+
+| Where | What |
+|---|---|
+| `docs/adr/` | A decision that is hard to reverse, surprising, and a real trade-off. Final form, no narrative. |
+| `docs/migration-log.md` | What was *discovered*, what was *wrong*, and the numbers. Narrative and rough is fine. |
+| Commit messages | Why this specific change. Not a substitute for the log — commits are hard to mine six weeks later. |
+
+**Be honest in it.** Entries where the first three explanations were wrong are
+more useful than entries where everything worked. The through-line so far is that
+everything real in this project was found by *running* it, not by reading it —
+don't sand that off.
+
+Numbers quoted in the log get re-measured before publishing; there's a checklist
+at the bottom of the file. Add to it rather than trusting a figure to still hold.
+
 ## Live actions
 
 The **Liftosaur MCP** (`mcp__liftosaur__*`) is still the tool for reading or
