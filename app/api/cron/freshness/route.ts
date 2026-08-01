@@ -7,8 +7,8 @@
 //
 // Also reachable by hand, and `npm run q "SELECT * FROM data_freshness"` does
 // the same locally.
-import { getPool } from '../../lib/db.js'
-import { json, requireBearer } from '../../lib/http.js'
+import { getPool } from '../../../../lib/db.js'
+import { json, requireBearer } from '../../../../lib/http.js'
 
 type FreshnessRow = {
   label: string
@@ -19,10 +19,9 @@ type FreshnessRow = {
   max_age_days: number
 }
 
-export default { fetch: handle }
+export const maxDuration = 60
 
-export async function handle(request: Request): Promise<Response> {
-  if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+export async function GET(request: Request): Promise<Response> {
   const denied = requireBearer(request, 'CRON_SECRET')
   if (denied) return denied
 

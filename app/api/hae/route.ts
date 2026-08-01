@@ -5,21 +5,18 @@
 //
 // Replaces the entire iCloud pipeline: no files, no launchd, no brctl, no mtime
 // ordering, and no laptop. See docs/adr/0004.
-import { getPool } from '../lib/db.js'
-import { json, requireBearer } from '../lib/http.js'
-import { writeObservations, writeWorkouts } from '../lib/ingest.js'
-import { logIngestRun } from '../lib/liftosaur.js'
-import { parseHaePayload } from '../lib/parse/hae.js'
+import { getPool } from '../../../lib/db.js'
+import { json, requireBearer } from '../../../lib/http.js'
+import { writeObservations, writeWorkouts } from '../../../lib/ingest.js'
+import { logIngestRun } from '../../../lib/liftosaur.js'
+import { parseHaePayload } from '../../../lib/parse/hae.js'
 
-// Non-framework Vercel Functions export a default object with `fetch`, and
-// dispatch on the method themselves. Named GET/POST exports are a Next.js
-// convention and do not apply here. maxDuration lives in vercel.json.
-export default { fetch: handle }
+export const maxDuration = 60
 
-export async function handle(request: Request): Promise<Response> {
-  if (request.method !== 'POST') {
-    return json({ error: 'method not allowed' }, 405)
-  }
+// Next.js routes a named export per method, so the hand-rolled dispatch and the
+// default { fetch } object are both gone. Anything but POST now 405s before
+// this function is reached.
+export async function POST(request: Request): Promise<Response> {
   const denied = requireBearer(request, 'HAE_INGEST_TOKEN')
   if (denied) return denied
 

@@ -1,7 +1,19 @@
 {
   "compilerOptions": {
     "target": "es2023",
-    "lib": ["es2023"],
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ],
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "strict": true,
@@ -9,11 +21,28 @@
     "exactOptionalPropertyTypes": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
+    "moduleDetection": "force",
     // Node strips types at runtime rather than compiling, so syntax that needs
     // a real emit step (enums, namespaces, parameter properties) is banned.
     "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
   },
-  "include": ["api/**/*.ts", "lib/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

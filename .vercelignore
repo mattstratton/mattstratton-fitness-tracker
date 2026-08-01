@@ -1,13 +1,9 @@
-# Belt and braces alongside outputDirectory: keep anything not needed to build
-# the functions out of the deployment entirely. A no-framework project with no
-# build step will otherwise serve its root directory as static files, which
-# would publish migrations, source, and ten years of health notes at guessable
-# URLs on a public domain.
+# Keep anything not needed to build the app out of the deployment.
 docs/
 db/
 exports/
 tests/
+scripts/
 *.md
-!DEPLOY.md
 fitness.db*
 .env
