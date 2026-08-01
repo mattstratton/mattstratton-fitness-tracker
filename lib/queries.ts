@@ -130,10 +130,23 @@ export async function loadToday(): Promise<{
   lastSession: { observedOn: string; label: string | null; setCount: number | null } | null
 }> {
   const [metrics, session] = await Promise.all([
+    // Today comes from the RAW Report log, not observations_daily.
+    //
+    // Once the continuous aggregate has materialised a bucket it stops
+    // consulting raw rows for it, so a Report arriving later the same day is
+    // invisible until the next refresh. That produced a real wrong answer: the
+    // page said 688 kcal while MacroFactor and the raw log both said 1556.
+    //
+    // The refresh policy is now wide enough that today should never be
+    // materialised (see 0008), but "today is correct" is too important to rest
+    // on a watermark rule that has already been misjudged twice. Reading raw
+    // makes it true by construction, and last(value, reported_at) is exactly
+    // what DISTINCT ON ... ORDER BY reported_at DESC computes.
     rows<Record<string, unknown>>(
-      `SELECT metric, value FROM observations_daily
+      `SELECT DISTINCT ON (metric) metric, value FROM observations
        WHERE observed_on = today_local()
-         AND metric IN ('weight_lbs','protein_g','calories','steps')`,
+         AND metric IN ('weight_lbs','protein_g','calories','steps')
+       ORDER BY metric, reported_at DESC`,
     ),
     rows<Record<string, unknown>>(
       `SELECT observed_on, label, set_count FROM training_sessions
