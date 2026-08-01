@@ -1,0 +1,70 @@
+/* Mobile first, because the question gets asked in the garage between sets.
+   Dark by default with a light override -- a phone in a dim garage at 6am is
+   the actual environment, not a bright desk. */
+:root {
+  --bg: #0f1113;
+  --panel: #171a1d;
+  --line: #262b30;
+  --text: #e8eaed;
+  --muted: #99a1a8;
+  --ok: #4ea672;
+  --watch: #d8a13a;
+  --act: #d2544f;
+  --unknown: #6b757d;
+  --accent: #6ea8d8;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fbfbfa; --panel: #fff; --line: #e4e4e2; --text: #16181a;
+    --muted: #5f676d; --ok: #2f7d52; --watch: #a5761d; --act: #b23a35;
+    --unknown: #7a838a; --accent: #2c6ea3; color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
+h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: .02em; margin: 0; }
+h2 { font-size: .8rem; font-weight: 600; text-transform: uppercase;
+     letter-spacing: .08em; color: var(--muted); margin: 2rem 0 .75rem; }
+a { color: var(--accent); }
+
+header { display: flex; align-items: baseline; gap: 1rem;
+         padding: 1rem 1rem .5rem; max-width: 46rem; margin: 0 auto; }
+nav { display: flex; gap: 1rem; margin-left: auto; font-size: .9rem; }
+nav a { text-decoration: none; color: var(--muted); }
+nav a:hover, nav a[data-active] { color: var(--text); }
+
+/* Today's numbers. Tabular figures so they don't jitter between renders. */
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+@media (min-width: 34rem) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile { background: var(--panel); border: 1px solid var(--line);
+        border-radius: .6rem; padding: .7rem .8rem; }
+.tile .k { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+           color: var(--muted); }
+.tile .v { font-size: 1.5rem; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+.tile .v.none { font-size: 1rem; color: var(--muted); }
+
+.signal { display: flex; gap: .7rem; background: var(--panel);
+          border: 1px solid var(--line); border-left-width: 3px;
+          border-radius: .5rem; padding: .7rem .85rem; margin-bottom: .5rem; }
+.signal[data-s="ok"]      { border-left-color: var(--ok); }
+.signal[data-s="watch"]   { border-left-color: var(--watch); }
+.signal[data-s="act"]     { border-left-color: var(--act); }
+.signal[data-s="unknown"] { border-left-color: var(--unknown); }
+.signal .body { min-width: 0; }
+.signal .t { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); }
+.signal .h { margin-top: .1rem; }
+.signal .d { margin-top: .35rem; font-size: .85rem; color: var(--muted); }
+
+.chart { background: var(--panel); border: 1px solid var(--line);
+         border-radius: .6rem; padding: .8rem; margin-bottom: 1rem; }
+.chart figcaption { display: flex; justify-content: space-between;
+                    font-size: .8rem; color: var(--muted); margin-bottom: .5rem; }
+.chart svg { display: block; width: 100%; height: auto; }
+.empty { color: var(--muted); font-size: .9rem; padding: .5rem 0; }
