@@ -7,6 +7,7 @@ import { overreaching } from '../lib/signals/recovery.js'
 import { stalling, recentMisses, toSessions } from '../lib/signals/lifting.js'
 import { freshness } from '../lib/signals/freshness.js'
 import { parseTiers } from '../lib/signals/tiers.js'
+import { TARGETS, MAINTAIN, BULK } from '../lib/config.js'
 import type { LiftingSetRow, NutritionDay, RecoveryDay } from '../lib/signals/types.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
@@ -306,4 +307,42 @@ test('tiers: a non-GZCL program yields nothing, and nothing breaks', () => {
   // Same verdict with an empty map as with no map at all.
   assert.equal(stalling(sets, parseTiers(fiveThreeOne)).status, 'act')
   assert.equal(stalling(sets).status, 'act')
+})
+
+// ---- phase awareness -------------------------------------------------------
+
+test('phase: the same weight trend reads differently on a cut and a bulk', () => {
+  // 1.2 lb/week down. Correct on a cut, and going backwards on a bulk. The
+  // hazard this replaces was a hardcoded cutting assumption still grading a
+  // bulk months later, looking authoritative and being wrong.
+  const rows = [{ days: 14, weighIns: 9, lbsPerWeek: -1.2 }]
+  assert.equal(weightTrend(rows, TARGETS).status, 'ok')
+
+  const bulk = weightTrend(rows, BULK)
+  assert.equal(bulk.status, 'watch')
+  assert.match(bulk.detail ?? '', /wrong way for a bulk/)
+})
+
+test('phase: maintenance flags drift in either direction', () => {
+  assert.equal(weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: -1.0 }], MAINTAIN).status, 'watch')
+  assert.equal(weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: 1.0 }], MAINTAIN).status, 'watch')
+  assert.equal(weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: -0.2 }], MAINTAIN).status, 'ok')
+})
+
+test('phase: gaining fast on a bulk is flagged, but not as "wrong way"', () => {
+  const s = weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: 1.8 }], BULK)
+  assert.equal(s.status, 'watch')
+  assert.match(s.detail ?? '', /more than the useful rate/)
+})
+
+test('phase: protein grades against the phase target, not a constant', () => {
+  const days = nutrition([175, 175, 175, 175])
+  assert.equal(proteinAdherence(days, TARGETS).status, 'act', '175g misses a 198g cut target')
+  assert.equal(proteinAdherence(days, MAINTAIN).status, 'ok', '175g clears a 170g maintenance target')
+})
+
+test('phase: a bulk calls it a surplus rather than a deficit', () => {
+  const rows = [{ windowDays: 14, coveragePct: 90, avgNetKcal: 400, impliedLbsPerWeek: 0.8, actualLbsPerWeek: 0.5, overstatementFactor: 1.6 }]
+  assert.equal(deficitReality(rows, BULK).title, 'Surplus')
+  assert.equal(deficitReality(rows, TARGETS).title, 'Deficit')
 })

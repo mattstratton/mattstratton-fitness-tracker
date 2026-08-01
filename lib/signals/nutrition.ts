@@ -1,7 +1,6 @@
+import { TARGETS } from '../config.js'
+import type { Targets } from '../config.js'
 import type { NutritionDay, Signal } from './types.js'
-
-/** Settled in nutrition-strategy.md. Not a suggestion. */
-export const PROTEIN_TARGET_G = 198
 
 /**
  * Protein adherence over a window of COMPLETE days.
@@ -14,7 +13,8 @@ export const PROTEIN_TARGET_G = 198
  * Callers must exclude today: it is a Partial Day and its intake is whatever has
  * been logged so far.
  */
-export function proteinAdherence(days: NutritionDay[], target = PROTEIN_TARGET_G): Signal {
+export function proteinAdherence(days: NutritionDay[], targets: Targets = TARGETS): Signal {
+  const target = targets.proteinG
   const base = { id: 'protein', title: 'Protein' } as const
   const logged = days.filter((d) => d.proteinG !== null) as Array<NutritionDay & { proteinG: number }>
 

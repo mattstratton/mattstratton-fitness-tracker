@@ -1,3 +1,5 @@
+import { TARGETS } from '../config.js'
+import type { Targets } from '../config.js'
 import type { EnergyRealityRow, Signal, WeightTrendRow } from './types.js'
 
 /** Below this, avg_net_kcal averages logged days against a trend over all days. */
@@ -10,7 +12,7 @@ const MIN_COVERAGE_PCT = 60
  * case: it's either the start of a real change or a fortnight of water, and
  * which one it is only becomes clear later. Worth surfacing, not worth acting on.
  */
-export function weightTrend(rows: WeightTrendRow[]): Signal {
+export function weightTrend(rows: WeightTrendRow[], targets: Targets = TARGETS): Signal {
   const base = { id: 'weight', title: 'Weight' } as const
   const by = (d: number) => rows.find((r) => r.days === d)
   const short = by(14)
@@ -33,18 +35,23 @@ export function weightTrend(rows: WeightTrendRow[]): Signal {
     }
   }
 
-  // Faster than ~1.5 lb/week on a cut starts costing lean mass, which is the
-  // thing the whole protein target exists to protect.
-  const status = rate < -1.5 ? 'watch' : 'ok'
-  return {
-    ...base,
-    status,
-    headline,
-    detail:
-      status === 'watch'
-        ? 'Faster than about 1.5 lb/week tends to come partly out of lean mass. Check that protein is holding.'
-        : `${short.weighIns} weigh-ins in the window.`,
+  // Direction comes from the phase, so one rule covers cut, maintain and bulk.
+  // Moving the WRONG WAY is always worth flagging; moving the right way too
+  // fast costs lean mass on a cut and adds fat on a bulk.
+  const wrongWay = targets.expected !== 0 && Math.sign(rate) !== Math.sign(targets.expected)
+  const tooFast = Math.abs(rate) > targets.concerning
+  const status = wrongWay || tooFast ? 'watch' : 'ok'
+
+  let detail = `${short.weighIns} weigh-ins in the window. Target is about ${targets.expected.toFixed(1)} lb/week on a ${targets.phase}.`
+  if (wrongWay) {
+    detail = `Going the wrong way for a ${targets.phase} (target ${targets.expected.toFixed(1)} lb/week).`
+  } else if (tooFast) {
+    detail =
+      targets.phase === 'cut'
+        ? `Faster than ${targets.concerning} lb/week tends to come partly out of lean mass. Check protein is holding.`
+        : `Faster than ${targets.concerning} lb/week on a ${targets.phase} is more than the useful rate.`
   }
+  return { ...base, status, headline, detail }
 }
 
 /**
@@ -55,8 +62,11 @@ export function weightTrend(rows: WeightTrendRow[]): Signal {
  * real numbers whose *difference* is not a measurement. This signal exists so
  * that gap is visible rather than quietly believed.
  */
-export function deficitReality(rows: EnergyRealityRow[]): Signal {
-  const base = { id: 'deficit', title: 'Deficit' } as const
+export function deficitReality(rows: EnergyRealityRow[], targets: Targets = TARGETS): Signal {
+  // On a bulk this is a surplus, not a deficit; the arithmetic is identical and
+  // only the word changes.
+  const word = targets.expected > 0 ? 'Surplus' : 'Deficit'
+  const base = { id: 'deficit', title: word } as const
 
   // Prefer the widest window that is actually well covered. A 90-day row at 21%
   // coverage produces a confident nonsense number.
@@ -69,7 +79,7 @@ export function deficitReality(rows: EnergyRealityRow[]): Signal {
     return {
       ...base,
       status: 'unknown',
-      headline: 'Not enough logged days to judge the deficit',
+      headline: `Not enough logged days to judge the ${word.toLowerCase()}`,
       detail: best
         ? `Best coverage is ${best.coveragePct}% over ${best.windowDays} days; ${MIN_COVERAGE_PCT}% is the bar. Comparing an average over logged days against a trend over all days is meaningless below that.`
         : undefined,
