@@ -378,6 +378,42 @@ Three lessons, all of which belong in the post:
    Progress, MacroFactor, Liftosaur. Only 30 of 683 weigh-ins were ever hand-entered, and
    nearly all of those predate owning a scale.
 
+## The web app: four deploy failures, none reproducible locally
+
+`npm run build` and 40 tests passed before every single one. That's the theme.
+
+1. **`.ts` import specifiers.** Node's native TypeScript runner *requires* them;
+   Vercel transpiles to `.js` and leaves specifiers untouched, so every route
+   shipped asking for a file that no longer existed. Two toolchains with exactly
+   opposite requirements.
+2. **`tsconfig` never covered `api/`.** So `tsc --noEmit` had never once looked at
+   the three files that broke. A typecheck that misses your entry points is
+   theatre.
+3. **No framework preset.** The project was created by `vercel link` before there
+   was a framework, so `framework: null` meant Vercel treated a Next.js app as a
+   static site and looked for the `public/` directory the conversion had deleted.
+4. **A stale project-level Output Directory.** Pinning the framework got Vercel to
+   recognise Next and it *still* looked in `public`, because a project setting
+   beats framework detection. Fixed by overriding it in `vercel.json` so the repo
+   is self-contained.
+
+Nothing here is exotic. Every one is configuration that was correct for the
+previous shape of the project and silently wrong for the new one, and none of it
+is expressible in a local build. The lesson for the post is to get a deploy green
+early rather than accumulating local confidence that doesn't transfer.
+
+### And one that would have shipped a public health dashboard
+
+`export { auth as middleware }` reads exactly like it protects your routes. It
+does not — it attaches the session and waves every request through. An anonymous
+`GET /` returned **200** until an `authorized` callback was added.
+
+That's the same family as the four above but worse: configuration that appears
+correct, does nothing, and fails *open*. It was caught only by curling a running
+server instead of reading the matcher. Pair it with the sleep-stage unit bug and
+the `inBed: 0` regression and there's a clear through-line for the writeup —
+**everything real in this project was found by running it, not by reading it.**
+
 ## Numbers to re-measure before publishing
 
 - [x] Compression: **8.8×** on Tiger Cloud, clean load. Note honestly that the backfill
