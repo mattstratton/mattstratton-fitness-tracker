@@ -48,6 +48,7 @@ nav a:hover, nav a[data-active] { color: var(--text); }
            color: var(--muted); }
 .tile .v { font-size: 1.5rem; font-variant-numeric: tabular-nums; margin-top: .15rem; }
 .tile .v.none { font-size: 1rem; color: var(--muted); }
+.tile .age { font-size: .65rem; color: var(--muted); margin-top: .15rem; }
 
 .signal { display: flex; gap: .7rem; background: var(--panel);
           border: 1px solid var(--line); border-left-width: 3px;

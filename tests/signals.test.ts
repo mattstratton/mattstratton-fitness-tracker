@@ -165,6 +165,7 @@ test('recovery: three suppressed days on both markers is actionable', () => {
   const hrv = [...wobble(25, 60), 40, 39, 41]
   const s = overreaching(recovery(rhr, hrv))
   assert.equal(s.status, 'act')
+  assert.match(s.headline, /suppressed resting HR\/HRV/)
   assert.match(s.detail ?? '', /resting HR/)
   assert.match(s.detail ?? '', /HRV/)
 })
@@ -172,7 +173,10 @@ test('recovery: three suppressed days on both markers is actionable', () => {
 test('recovery: one bad night is not overreaching', () => {
   const rhr = [...wobble(25, 55), 55, 55, 70]
   const hrv = [...wobble(28, 60)]
-  assert.equal(overreaching(recovery(rhr, hrv)).status, 'ok')
+  const s = overreaching(recovery(rhr, hrv))
+  assert.equal(s.status, 'ok')
+  // Must read as resting HR/HRV only -- never as a sleep claim (issue #10).
+  assert.match(s.headline, /Resting HR\/HRV normal/)
 })
 
 test('recovery: a zero-variance baseline is unknown, not "normal"', () => {
@@ -191,7 +195,9 @@ test('recovery: the recent window cannot drag its own baseline', () => {
   // mean and mask themselves. Long flat history, then a clear 3-day jump.
   const rhr = [...wobble(40, 50), 60, 61, 60]
   const hrv = [...wobble(43, 60)]
-  assert.equal(overreaching(recovery(rhr, hrv)).status, 'watch')
+  const s = overreaching(recovery(rhr, hrv))
+  assert.equal(s.status, 'watch')
+  assert.match(s.headline, /suppressed resting HR\/HRV/)
 })
 
 // ---- lifting ---------------------------------------------------------------

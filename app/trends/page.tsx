@@ -13,12 +13,12 @@ export const dynamic = 'force-dynamic'
 const RANGE_OPTIONS = [30, 90, 365] as const
 
 const DEFAULT_DAYS = {
-  weight: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90,
+  weight: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90, sleep: 90,
 } as const
 
 type Metric = keyof typeof DEFAULT_DAYS
 
-const METRICS: Metric[] = ['weight', 'protein', 'calories', 'steps', 'rhr', 'hrv']
+const METRICS: Metric[] = ['weight', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep']
 
 const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: number; height: number }> = {
   weight: { title: 'Weight', unit: 'lb', maxGapDays: 5, height: 140 },
@@ -27,6 +27,11 @@ const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: 
   steps: { title: 'Steps', height: 90 },
   rhr: { title: 'Resting heart rate', unit: 'bpm', maxGapDays: 4, height: 90 },
   hrv: { title: 'HRV', unit: 'ms', maxGapDays: 4, height: 90 },
+  // Sleep has ~7% coverage -- no maxGapDays override needed. Nights are
+  // virtually always >3 days apart (Chart's default), so this already
+  // renders as isolated dots with no connecting line, same as the sparse
+  // scatter weight/RHR/HRV get for free.
+  sleep: { title: 'Sleep', unit: 'hr', height: 90 },
 }
 
 function resolveDays(raw: string | undefined, fallback: number): number {
@@ -67,21 +72,27 @@ export default async function Trends({
     steps: resolveDays(params['steps'], DEFAULT_DAYS.steps),
     rhr: resolveDays(params['rhr'], DEFAULT_DAYS.rhr),
     hrv: resolveDays(params['hrv'], DEFAULT_DAYS.hrv),
+    sleep: resolveDays(params['sleep'], DEFAULT_DAYS.sleep),
   }
 
-  const [weight, protein, calories, steps, rhr, hrv, targets, today, weightTrendLine] = await Promise.all([
+  const [weight, protein, calories, steps, rhr, hrv, sleep, targets, today, weightTrendLine] = await Promise.all([
     loadSeries('weight_lbs', days.weight),
     loadSeries('protein_g', days.protein),
     loadSeries('calories', days.calories),
     loadSeries('steps', days.steps),
     loadSeries('resting_hr', days.rhr),
     loadSeries('hrv_ms', days.hrv),
+    loadSeries('sleep_asleep_min', days.sleep),
     loadTargets(),
     loadTodayDate(),
     loadWeightTrendLine(days.weight),
   ])
 
-  const points: Record<Metric, Point[]> = { weight, protein, calories, steps, rhr, hrv }
+  // Minutes -> hours for readability, same pattern as protein/calories'
+  // status maps below transforming a raw series before display.
+  const sleepHours: Point[] = sleep.map((p) => ({ observedOn: p.observedOn, value: p.value / 60 }))
+
+  const points: Record<Metric, Point[]> = { weight, protein, calories, steps, rhr, hrv, sleep: sleepHours }
 
   const proteinStatuses = new Map(
     protein.map((p) => [p.observedOn, resolveBarStatus(p.value, targets.proteinG, 'atLeast')] as const),
@@ -104,6 +115,7 @@ export default async function Trends({
     steps: windowStartDate(today, days.steps),
     rhr: windowStartDate(today, days.rhr),
     hrv: windowStartDate(today, days.hrv),
+    sleep: windowStartDate(today, days.sleep),
   }
 
   type Extra = {
@@ -137,6 +149,7 @@ export default async function Trends({
     steps: { markType: 'line' },
     rhr: { markType: 'line' },
     hrv: { markType: 'line' },
+    sleep: { markType: 'line' },
   }
 
   return (
@@ -163,7 +176,9 @@ export default async function Trends({
 
       <p className="empty">
         Lines never interpolate across gaps and bars never appear for a day that
-        wasn't logged. Today is always excluded — it's still accumulating.
+        wasn't logged. Today is always excluded — it's still accumulating. Sleep
+        coverage is intentionally sparse (~7%) and shown for reference, not a trend
+        to read into.
       </p>
     </main>
   )

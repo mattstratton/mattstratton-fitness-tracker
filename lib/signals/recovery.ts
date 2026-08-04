@@ -75,14 +75,17 @@ export function overreaching(days: RecoveryDay[]): Signal {
   }
 
   if (flags.length === 0) {
-    return { ...base, status: 'ok', headline: 'Recovery markers normal' }
+    // "Recovery" reads as a sleep claim to anyone unfamiliar with this file --
+    // it isn't one. This is resting HR/HRV only; sleep has its own,
+    // deliberately unjudged, display (lib/sleep.ts).
+    return { ...base, status: 'ok', headline: 'Resting HR/HRV normal' }
   }
 
   return {
     ...base,
     // Both markers agreeing is a much stronger signal than either alone.
     status: flags.length > 1 ? 'act' : 'watch',
-    headline: `${RECENT_DAYS} days of suppressed recovery`,
+    headline: `${RECENT_DAYS} days of suppressed resting HR/HRV`,
     detail: `${flags.join('; ')}. On a deficit this usually means back off volume or eat more, before it becomes a missed session.`,
   }
 }

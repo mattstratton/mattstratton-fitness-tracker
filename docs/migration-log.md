@@ -643,6 +643,59 @@ GZCLP now rests on a different, weaker foundation than the one recorded.
       just above the 50% sparse threshold, which is *why* the bar-chart bug only appeared at
       the 1y window). Denominator is `windowDays - 1`: `loadSeries` excludes both boundary
       days. Re-measure; a few missed weigh-ins flip which side of the threshold this lands on.
+- [ ] Sleep coverage (~7% / 16 nights in 19 months, per `metric_catalog`'s comment) vs. what's
+      actually on the scale now: on 2026-08-04, the five most recent calendar days (2026-07-31
+      through 2026-08-04) **all** have a recorded night. Whether that's a genuine recent uptick
+      in watch-wear or a short streak inside an otherwise-sparse year needs a real query over a
+      longer window before either number gets quoted in a writeup — see the entry below.
+
+## Sleep display added, and the "~7% coverage" assumption checked against live data (#10)
+
+Issue #10 asked for sleep to be represented in the web app at all — it wasn't, anywhere.
+Building it surfaced two things worth recording.
+
+**Finding 1 — the actual bug behind the issue's framing.** The user experience issue #10
+describes ("recovery markers normal" doesn't feel useful) turned out not to be about sleep
+data quality or absence at all. `lib/signals/recovery.ts`'s `overreaching()` produces that
+exact headline, and it is driven entirely by resting heart rate and HRV — it has never read
+a single sleep metric. The headline just *reads* like a sleep verdict to anyone who doesn't
+know the file. Reworded to "Resting HR/HRV normal" (and the suppressed-recovery headline to
+match) so "Recovery" can't be misread as "you slept fine." Sleep itself got its own,
+deliberately unjudged display instead (`lib/sleep.ts`, `loadLatestSleep`) — no `Signal`, no
+`ok`/`watch`/`act`, on purpose: `CLAUDE.md` and the coach skill are explicit that sleep
+coverage is too sparse to grade, and a judged signal here would sit at `unknown` roughly 93%
+of the time — the same kind of noise the issue was complaining about in the first place.
+
+**Finding 2 — the ~7% coverage figure may be stale, or the recent stretch may be an outlier.**
+The plan for this work (reasonably) assumed sleep data would usually be too old to show on the
+glance page, given `db/migrations/0004_metric_catalog.sql`'s comment ("16 points in 19 months,
+6.6% of 2026") and `CLAUDE.md`'s "~7% coverage." Checking the live `sleep` view while
+implementing this turned up something the assumption didn't predict:
+
+```
+observed_on  asleep_min          in_bed_min          age_days
+-----------  ------------------  ------------------  --------
+2026-08-04   419.89              429.35              0
+2026-08-03   399.50              415.92              1
+2026-08-02   431.34              501.48              2
+2026-08-01   434.84              549.77              3
+2026-07-31   389.68              389.67              4
+```
+
+Five consecutive nights recorded, right up through today. That's not what a ~7%-coverage year
+looks like locally — it's either a genuine recent improvement in overnight watch-wear (plausible;
+`docs/migration-log.md`'s existing watch-wear note documents wear rates changing over time for
+the sibling `resting_hr`/`hrv_ms` metrics), or a short streak that doesn't move the year-long
+average much. Both are consistent with what's on record; neither is confirmed by this one query.
+The catalog comment's number was never re-run against current data as part of this change, so it
+should be treated as of unknown freshness rather than re-quoted — flagged in the checklist above
+rather than corrected here, since correcting it would mean asserting a new number this change
+didn't actually measure.
+
+The practical consequence for this feature: the glance-page sleep tile (recency-gated at
+`RECENT_SLEEP_DAYS = 3`) will very likely render for Matty most days right now, not the "shows up
+occasionally" behavior the design discussion assumed — worth knowing when reviewing the deployed
+page, so an ever-present tile isn't mistaken for a bug.
 
 ## Trends charts readability — two real findings from rendering (#5)
 

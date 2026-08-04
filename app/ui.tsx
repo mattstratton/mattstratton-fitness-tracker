@@ -1,7 +1,8 @@
-import type { Point } from '../lib/queries.js'
+import type { Point, SleepNight } from '../lib/queries.js'
 import type { Signal } from '../lib/signals/types.js'
 import type { AxisTicks, BarStatus, TrendBand } from '../lib/charting.js'
 import { windowStartDate } from '../lib/charting.js'
+import { describeSleepAge, formatSleepDuration } from '../lib/sleep.js'
 import type { Mark } from './chart-marks.js'
 import { ChartMarks } from './chart-marks.js'
 
@@ -31,6 +32,20 @@ export function Tile({ label, value, unit }: { label: string; value: number | nu
           {unit ? <span style={{ fontSize: '.8rem', color: 'var(--muted)' }}> {unit}</span> : null}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Unlike Tile, takes a non-nullable SleepNight -- whether a night is recent
+ *  enough to show at all is the caller's call (see isSleepRecent), not this
+ *  component's. There's no "not logged" fallback here: sleep isn't expected
+ *  daily, so absence isn't a gap to flag, just nothing to show. */
+export function SleepTile({ sleep }: { sleep: SleepNight }) {
+  return (
+    <div className="tile">
+      <div className="k">Sleep</div>
+      <div className="v">{formatSleepDuration(sleep.asleepMin ?? 0)}</div>
+      <div className="age">{describeSleepAge(sleep.ageDays)}</div>
     </div>
   )
 }

@@ -172,6 +172,42 @@ export async function loadSignals(): Promise<Signal[]> {
 
 export type Point = { observedOn: string; value: number }
 
+export type SleepNight = {
+  observedOn: string
+  ageDays: number
+  asleepMin: number | null
+  inBedMin: number | null
+  coreMin: number | null
+  deepMin: number | null
+  remMin: number | null
+  awakeMin: number | null
+}
+
+/** Most recent night on record, however old, with its age in days. Sleep has
+ *  ~7% coverage so "most recent" can be stale for a while -- this never hides
+ *  or judges that; callers decide what to do with ageDays. */
+export async function loadLatestSleep(): Promise<SleepNight | null> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT observed_on, (today_local() - observed_on) AS age_days,
+            asleep_min, in_bed_min, core_min, deep_min, rem_min, awake_min
+     FROM sleep
+     WHERE asleep_min IS NOT NULL AND observed_on < today_local()
+     ORDER BY observed_on DESC LIMIT 1`,
+  )
+  const row = r[0]
+  if (!row) return null
+  return {
+    observedOn: day(row['observed_on']),
+    ageDays: Number(row['age_days']),
+    asleepMin: num(row['asleep_min']),
+    inBedMin: num(row['in_bed_min']),
+    coreMin: num(row['core_min']),
+    deepMin: num(row['deep_min']),
+    remMin: num(row['rem_min']),
+    awakeMin: num(row['awake_min']),
+  }
+}
+
 /** A metric as a dated series. Gaps are simply absent rows — never zeros. */
 export async function loadSeries(metric: string, days: number): Promise<Point[]> {
   const r = await rows<Record<string, unknown>>(
