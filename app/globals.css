@@ -91,3 +91,22 @@ nav a:hover, nav a[data-active] { color: var(--text); }
 .chart-range { display:flex; gap:.5rem; font-size:.7rem; }
 .chart-range a { text-decoration:none; color:var(--muted); }
 .chart-range a[data-active] { color:var(--text); font-weight:600; }
+
+.chart-expand-btn { display:flex; align-items:center; justify-content:center;
+                    background:none; border:none; padding:.2rem; margin:0;
+                    color:var(--muted); cursor:pointer; line-height:0; }
+.chart-expand-btn:hover { color:var(--text); }
+
+.chart-modal-overlay { position:fixed; inset:0; z-index:100;
+                        background:color-mix(in srgb, var(--bg) 88%, transparent);
+                        display:flex; align-items:center; justify-content:center;
+                        padding:1rem; }
+.chart-modal-close { position:absolute; top:1rem; right:1rem;
+                      background:var(--panel); border:1px solid var(--line);
+                      border-radius:50%; width:2.2rem; height:2.2rem;
+                      color:var(--text); font-size:1rem; line-height:1;
+                      cursor:pointer; }
+.chart-modal-panzoom { width:100%; max-width:46rem; overflow:hidden;
+                        touch-action:none; cursor:grab; }
+.chart-modal-panzoom:active { cursor:grabbing; }
+.chart-modal-panzoom .chart { margin-bottom:0; }

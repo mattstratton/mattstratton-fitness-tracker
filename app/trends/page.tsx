@@ -4,7 +4,9 @@ import {
 import {
   axisTicks, computeTrendBand, resolveBarStatus, resolveMarkType, windowStartDate,
 } from '../../lib/charting.js'
-import { Chart } from '../ui.js'
+import type { BarStatus, TrendBand } from '../../lib/charting.js'
+import type { Point } from '../../lib/queries.js'
+import { ExpandableChart } from '../expandable-chart.js'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,17 @@ const DEFAULT_DAYS = {
 } as const
 
 type Metric = keyof typeof DEFAULT_DAYS
+
+const METRICS: Metric[] = ['weight', 'protein', 'calories', 'steps', 'rhr', 'hrv']
+
+const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: number; height: number }> = {
+  weight: { title: 'Weight', unit: 'lb', maxGapDays: 5, height: 140 },
+  protein: { title: 'Protein', unit: 'g', height: 140 },
+  calories: { title: 'Calories', height: 90 },
+  steps: { title: 'Steps', height: 90 },
+  rhr: { title: 'Resting heart rate', unit: 'bpm', maxGapDays: 4, height: 90 },
+  hrv: { title: 'HRV', unit: 'ms', maxGapDays: 4, height: 90 },
+}
 
 function resolveDays(raw: string | undefined, fallback: number): number {
   const n = Number(raw)
@@ -68,6 +81,8 @@ export default async function Trends({
     loadWeightTrendLine(days.weight),
   ])
 
+  const points: Record<Metric, Point[]> = { weight, protein, calories, steps, rhr, hrv }
+
   const proteinStatuses = new Map(
     protein.map((p) => [p.observedOn, resolveBarStatus(p.value, targets.proteinG, 'atLeast')] as const),
   )
@@ -82,7 +97,7 @@ export default async function Trends({
   // Chart's x-scale spans the whole requested window, so the date labels have
   // to be spaced across that same window rather than across wherever the data
   // happens to sit. Same helper Chart uses, so the two can't drift.
-  const starts = {
+  const starts: Record<Metric, string> = {
     weight: windowStartDate(today, days.weight),
     protein: windowStartDate(today, days.protein),
     calories: windowStartDate(today, days.calories),
@@ -91,84 +106,60 @@ export default async function Trends({
     hrv: windowStartDate(today, days.hrv),
   }
 
+  type Extra = {
+    markType: 'line' | 'bar'
+    barStatuses?: Map<string, BarStatus>
+    targetLine?: number
+    trendBand?: TrendBand | null
+    connectPoints?: boolean
+  }
+
+  // markType is a literal "line" for weight/steps/RHR/HRV, never
+  // resolveMarkType: bars grow from zero and none of those metrics has a
+  // hit/miss target to color against, so a thin coverage window must never
+  // silently turn them into a misleading bar chart. connectPoints={false} on
+  // weight makes it a scatter -- daily wobble is water weight; the trend
+  // line is what's being read. Protein/Calories are the only two sparse
+  // series with a real target to grade against, so they're the only two that
+  // can ever become bars.
+  const extraFor: Record<Metric, Extra> = {
+    weight: { markType: 'line', connectPoints: false, trendBand },
+    protein: {
+      markType: resolveMarkType(protein, days.protein),
+      barStatuses: proteinStatuses,
+      targetLine: targets.proteinG,
+    },
+    calories: {
+      markType: resolveMarkType(calories, days.calories),
+      barStatuses: caloriesStatuses,
+      ...(targets.calories !== null ? { targetLine: targets.calories } : {}),
+    },
+    steps: { markType: 'line' },
+    rhr: { markType: 'line' },
+    hrv: { markType: 'line' },
+  }
+
   return (
     <main>
-      <div className="chart-section-header">
-        <h2>Weight</h2>
-        <RangeControl current={days} metric="weight" />
-      </div>
-      {/* markType is a literal "line", not resolveMarkType: bars grow from zero
-          and nobody weighs zero, so a sparse weight series must never become a
-          bar chart no matter how thin its coverage gets. Same for steps/RHR/HRV
-          below. connectPoints={false} makes it a scatter -- daily wobble is
-          water weight; the trend line is what's being read. */}
-      <Chart
-        title="Weight" points={weight} unit="lb" maxGapDays={5} height={140}
-        windowDays={days.weight} today={today}
-        markType="line"
-        connectPoints={false}
-        ticks={axisTicks(weight, days.weight, starts.weight)}
-        trendBand={trendBand}
-      />
-
-      <div className="chart-section-header">
-        <h2>Protein</h2>
-        <RangeControl current={days} metric="protein" />
-      </div>
-      <Chart
-        title="Protein" points={protein} unit="g" height={140}
-        windowDays={days.protein} today={today}
-        markType={resolveMarkType(protein, days.protein)}
-        ticks={axisTicks(protein, days.protein, starts.protein)}
-        barStatuses={proteinStatuses}
-        targetLine={targets.proteinG}
-      />
-
-      <div className="chart-section-header">
-        <h2>Calories</h2>
-        <RangeControl current={days} metric="calories" />
-      </div>
-      <Chart
-        title="Calories" points={calories}
-        windowDays={days.calories} today={today}
-        markType={resolveMarkType(calories, days.calories)}
-        ticks={axisTicks(calories, days.calories, starts.calories)}
-        barStatuses={caloriesStatuses}
-        {...(targets.calories !== null ? { targetLine: targets.calories } : {})}
-      />
-
-      <div className="chart-section-header">
-        <h2>Steps</h2>
-        <RangeControl current={days} metric="steps" />
-      </div>
-      <Chart
-        title="Steps" points={steps}
-        windowDays={days.steps} today={today}
-        markType="line"
-        ticks={axisTicks(steps, days.steps, starts.steps)}
-      />
-
-      <div className="chart-section-header">
-        <h2>Resting heart rate</h2>
-        <RangeControl current={days} metric="rhr" />
-      </div>
-      <Chart
-        title="Resting heart rate" points={rhr} unit="bpm" maxGapDays={4}
-        windowDays={days.rhr} today={today}
-        markType="line"
-        ticks={axisTicks(rhr, days.rhr, starts.rhr)}
-      />
-
-      <div className="chart-section-header">
-        <h2>HRV</h2>
-        <RangeControl current={days} metric="hrv" />
-      </div>
-      <Chart
-        title="HRV" points={hrv} unit="ms" maxGapDays={4}
-        windowDays={days.hrv} today={today}
-        markType="line"
-        ticks={axisTicks(hrv, days.hrv, starts.hrv)}
-      />
+      {METRICS.map((key) => {
+        const cfg = CHART_CONFIG[key]
+        const metricPoints = points[key]
+        return (
+          <ExpandableChart
+            key={key}
+            rangeControl={<RangeControl current={days} metric={key} />}
+            title={cfg.title}
+            points={metricPoints}
+            height={cfg.height}
+            windowDays={days[key]}
+            today={today}
+            ticks={axisTicks(metricPoints, days[key], starts[key])}
+            {...(cfg.unit !== undefined ? { unit: cfg.unit } : {})}
+            {...(cfg.maxGapDays !== undefined ? { maxGapDays: cfg.maxGapDays } : {})}
+            {...extraFor[key]}
+          />
+        )
+      })}
 
       <p className="empty">
         Lines never interpolate across gaps and bars never appear for a day that
