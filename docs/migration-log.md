@@ -633,16 +633,35 @@ GZCLP now rests on a different, weaker foundation than the one recorded.
       alone — get the real `git diff --stat`).
 - [ ] Query timing on a representative `/coach` question, SQLite vs Tiger Cloud. Expect
       SQLite to win on a local 840KB file; say so if it does.
+- [ ] Weight chart plot-height share: **35% band-folded vs 66% clipped** (39.3 vs 74.0 of
+      112 user units). Measured 2026-08-04 on the live 90-day window: observed 269.8–283.0 lb
+      (47 readings), ticks 265–285, regression slope −0.1029 lb/day, band rails 250.5/288.2
+      from cut targets expected −1.0 / concerning 1.5. Re-derive by re-running that
+      regression — the share moves as the observed spread does, so this figure is a
+      snapshot, not a constant.
+- [ ] Weight coverage at each window (**47 of 89 possible days at 90d** on 2026-08-04 — 53%,
+      just above the 50% sparse threshold, which is *why* the bar-chart bug only appeared at
+      the 1y window). Denominator is `windowDays - 1`: `loadSeries` excludes both boundary
+      days. Re-measure; a few missed weigh-ins flip which side of the threshold this lands on.
 
 ## Trends charts readability — two real findings from rendering (#5)
 
 ### 1. Trend band geometry excluded from axis scaling (critical rendering bug)
 
-A weight chart's expected-vs-concerning band (from `computeTrendBand`) was computed correctly but excluded from the axis range calculation in `app/ui.tsx`. The band polygon draws regression-fitted boundaries across the full window: a 90-day weight chart with values 210–222 and cut targets (expected −1.0, concerning 0.75) generates band limits at 199.75–225. The axis calculation folded only the observed values (210–222) plus raw tick suggestions into `lo`/`hi`, missing the polygon coordinates entirely. Result: the band extended from y≈110 in a 90-unit-tall viewBox, clipped and covering ~90% of the plot area, rendering every reading as "on track" regardless of actual trend.
+A weight chart's expected-vs-concerning band (from `computeTrendBand`) was computed correctly but excluded from the axis range calculation in `app/ui.tsx`. The band polygon draws regression-fitted boundaries across the full window, and those boundaries can sit far outside anything ever observed. The axis calculation folded only the observed values plus the raw tick suggestions into `lo`/`hi`, missing the polygon coordinates entirely, so the band drew partly off-canvas.
+
+Measured against the real 90-day window on 2026-08-04 (not the hypothetical numbers this entry originally carried, which described neither the live data nor the chart's actual height — the weight chart ships at `height={140}`, giving a 112-user-unit plot area from y=6 to y=118, not the 90-unit viewBox the first draft assumed):
+
+- observed weight 269.8–283.0 lb, 47 readings; `axisTicks` → 265/270/275/280/285
+- targets: cut, expected −1.0 lb/wk, concerning 1.5
+- regression over that window: slope −0.1029 lb/day, intercept 272.78 at 2026-08-04 → trend line 281.9 → 272.9
+- band rails therefore reach **250.5 and 288.2** — 14.5 lb below and 5.2 lb above anything on the scale
+
+With the band excluded from the domain (`lo`/`hi` = 265/285) those rails land at y=199 and y=−12 against a plot that ends at y=118: substantially off-canvas, exactly as reported.
 
 Code review caught this before a render, but it's a canonical "something looked right in isolation" case: the band geometry was correct, the scale logic was correct, and they simply weren't composed together.
 
-**Fix:** folded `trendBand.band` point values into `lo`/`hi` before computing the scale, along with `trendBand.trendLine`. Numeric check: band y-coords then landed at 13.4–68 (inside the plot area 6–74), and the chart now correctly shows when a trend overshoots the target.
+**Fix (superseded — see "Domain expansion is not clipping" below):** folded `trendBand.band` and `trendBand.trendLine` values into `lo`/`hi` before computing the scale. This does stop the band drawing off-canvas. It also turned out to be the wrong fix, for reasons the whole-branch review found and the later entry records.
 
 ### 2. SVG text on mobile: viewport scaling is not what the code looks like
 
@@ -650,6 +669,42 @@ Axis text across all charts was hardcoded `fontSize="8"` (user units in a 600-un
 
 Discovered during Task 6's review phase; the `Chart` component had shipped without mobile testing. A reasonable reading of the code — "set a font size, place a label" — completely misses that SVG viewport scaling is not a linear visual property once you factor in actual device widths.
 
-**Fix:** replaced all hardcoded `fontSize="8"` with `fontSize="16"` (AXIS_FONT constant). Renders at ≈8.9 CSS pixels on the same phone — roughly double, and legible. Coordinate scaling math was already correct; only the text sizing needed adjustment.
+**Fix:** replaced the hardcoded `fontSize="8"` values **in `app/ui.tsx`** with `fontSize={AXIS_FONT}` (16). Renders at ≈8.9 CSS pixels on the same phone — roughly double, and legible. Coordinate scaling math was already correct; only the text sizing needed adjustment.
+
+The original wording here claimed "all hardcoded `fontSize=8`", which was not true. `app/chart-marks.tsx` — the tap-to-read label, i.e. the one piece of text a user deliberately summons in order to read a number — still had `fontSize="9"` and kept it through every per-task review, right up to the final whole-branch pass. The fix had been described in terms of the *finding* ("SVG text is too small") but implemented in terms of one file, and the log's summary quietly inherited the wrong scope. Worth noting as a documentation failure mode of its own: a fix note that generalises past what the diff did makes the remaining instance invisible to everyone reading the log later.
 
 **Broader finding:** this is the second render-only bug in the charting work, following the "water bucket outside the container" trend-band bug. The app is server-rendered, so neither of these would have surfaced without an actual browser, and neither is expressible as a test. Pair with the settings page's OAuth localhost limitation — local dev's `next build` and typecheck both pass while the app is undeployed and untested in a real viewport.
+
+### 3. A generic rule applied where it was never meant to
+
+`resolveMarkType(points, windowDays)` was written as a per-series rule: under 50% coverage, draw bars from a baseline instead of scattered dots, because sparse dots read as confetti. Fine as far as it goes. It was then wired up for all six metrics in `app/trends/page.tsx`, because it takes a series and a window and there is nothing in its signature suggesting otherwise.
+
+The problem only shows up once you change the window. At 90 days weight has 47 readings — 53%, a line. Click "1y" and it's 47 of 364, comfortably under the threshold, and the weight chart silently becomes a bar chart. Bars grow from zero, and a bar's height is a claim that zero is the meaningful baseline. Nobody weighs zero. Same for resting HR and HRV: a 60 bpm bar next to a 58 bpm bar encodes essentially nothing, and worse, it *looks* like it encodes something.
+
+The coverage threshold was never wrong; it just can't know which metrics have a baseline worth measuring against. That's a property of the metric, not of its density. **Fix:** the four metrics with no meaningful zero (weight, steps, resting HR, HRV) now pass `markType="line"` as a literal, and `resolveMarkType` is called only for protein and calories — the two that have a target to colour a hit/miss against, which is the only reason the bar rendering exists. The function's docstring now says so out loud, because the signature can't.
+
+The general shape: a rule derived from one metric's problem, given a generic signature, gets applied generically. Nothing in the type system objects. Nothing in the per-task review objects either, because within any single task the call site looks like consistency.
+
+### 4. Domain expansion is not clipping
+
+Finding 1 above was fixed by folding the band's coordinates into the axis domain so the band would fit. It fits. It also destroyed the chart.
+
+Measured on the real 90-day weight window (2026-08-04), plot area 112 user units tall:
+
+| Domain source | `lo`–`hi` | Height the real readings occupy |
+|---|---|---|
+| band folded in (the finding-1 fix) | 250.5–288.2 | **39.3 of 112 units — 35%** |
+| values + ticks only (current) | 265–285 | **74.0 of 112 units — 66%** |
+
+The band's rails reach 250.5 and 288.2 because they're a regression rate projected across 88 days; the actual scale readings only span 13.2 lb. Sizing the axis to the extrapolation squeezed 13.2 lb of real data into a third of the chart to make room for a shaded region that exists purely as context. The thing you came to the chart to read got the smallest share of it.
+
+**Fix:** the domain goes back to being driven only by the observed values, the tick suggestions and the flat target line. The band polygon and trend line are wrapped in a `<g clipPath>` scoped to the plot rect, so the parts that fall outside get cropped. Both rails now land outside the plot (y=199 and y=−12 against a plot ending at y=118) and are simply not drawn there, which is correct: the band is context for the visible range, not a thing the visible range has to accommodate.
+
+**The property worth remembering:** every chart in this app is a fixed 600-unit-wide `viewBox` scaled down to roughly 330 CSS px on a phone — a ~0.55 factor on *everything*, coordinates and text alike. Three separate bugs in this one issue trace back to it: text sized in user units that renders illegibly (finding 2), a 12-unit tap circle that becomes a sub-7px touch target, and now a domain sized in data units where the visual consequence is invisible from the code. Anything that "looks fine" in the source is being read at 55%. Two rules fall out of it, and they should apply to every future chart here:
+
+1. **Overlays are clipped, never accommodated.** If something extrapolates, crop it to the plot rect. Widening the domain to contain an overlay always costs the real data its resolution.
+2. **Anything sized in user units needs the 0.55 factor applied before you believe it.** Fonts, hit targets, stroke widths. A `fontSize` that reads as reasonable in the JSX is not.
+
+Also fixed in the same pass, all of them small and all of them only visible with everything assembled: the tap-to-read label clipped at the top and right edges of the chart (and the right edge is where "today" is, so it clipped exactly where you'd tap most); tap targets became full-height bands between mark midpoints instead of fixed circles, which both fixes the touch-target size and makes dense series selectable at all; the tap label showed `Math.round(value)`, throwing away the tenths of a pound that are the entire point of a weight chart; the y-axis had no left gutter, so its numbers sat on top of the leftmost mark (and the obvious fix — a fixed-width gutter with right-aligned labels — turns out to reproduce the same class of bug one step over: a gutter wide enough for weight's `265` sends steps' `15000` off the left edge of the viewBox, so the gutter is sized from the longest tick label instead); bar charts had no labelled zero gridline despite growing from zero (`axisTicks` derives ticks from the data's own min/max and usually omits it); the x-axis date labels were spaced across the *data's* extent while the x-scale spanned the *window*, so clustered data bunched its labels into the cluster and left most of the axis blank; the coverage denominator said `windowDays` when `loadSeries` excludes both boundary days and so can only ever reach `windowDays - 1`; and `loadWeightTrendLine` fitted its regression with `observed_on <= today_local()`, quietly including the Partial Day that every other query in this codebase is careful to exclude.
+
+That last one is the tell for the whole round. Nine of these ten fixes were invisible per-task and obvious once the pieces sat on one page.
