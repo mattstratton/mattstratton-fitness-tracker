@@ -17,7 +17,7 @@ Spec: `docs/superpowers/specs/2026-08-04-trends-charts-readability-design.md`
 - Today is always excluded from every plotted series/bars — it's a Partial Day (spec: Decisions locked).
 - Every tap/hit target is ≥24px even though the visible mark stays small — mobile-first (spec: Chart component section).
 - This spec reuses the *existing* CSS custom properties in `app/globals.css` (`--bg`, `--panel`, `--line`, `--text`, `--muted`, `--accent`, `--ok`, `--watch`, `--act`, `--unknown`) — no new colors, no site-wide redesign (spec: Context, out of scope).
-- Dashed lines are reserved exclusively for target/threshold lines; axes and gridlines are always solid hairlines (spec: Chart component section).
+- Dashed lines mean "target/threshold" or "today" (the only two dashed elements in any chart); axes and gridlines are always solid hairlines, never dashed (spec: Chart component section). The today-marker and a target line can coexist on one chart — orientation (vertical vs. horizontal) disambiguates them.
 - Bars always grow from y=0, never a truncated baseline (spec: Chart component section).
 - `npm test` and `npm run typecheck` must both pass before any task is considered done (project standing rule, `CLAUDE.md`).
 
