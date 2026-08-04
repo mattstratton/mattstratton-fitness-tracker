@@ -17,6 +17,9 @@ HealthMetrics-*.json
 WorkoutMetrics-*.json
 *.hae
 
+# Brainstorming companion mockups (superpowers skill)
+.superpowers/
+
 # OS noise
 .DS_Store
 
