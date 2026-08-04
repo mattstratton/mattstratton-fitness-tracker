@@ -84,3 +84,10 @@ nav a:hover, nav a[data-active] { color: var(--text); }
                     font-size: .8rem; color: var(--muted); margin-bottom: .5rem; }
 .chart svg { display: block; width: 100%; height: auto; }
 .empty { color: var(--muted); font-size: .9rem; padding: .5rem 0; }
+
+.chart-section-header { display:flex; align-items:baseline; justify-content:space-between;
+                         margin:2rem 0 .5rem; }
+.chart-section-header h2 { margin:0; }
+.chart-range { display:flex; gap:.5rem; font-size:.7rem; }
+.chart-range a { text-decoration:none; color:var(--muted); }
+.chart-range a[data-active] { color:var(--text); font-weight:600; }
