@@ -148,6 +148,19 @@ export function Chart({
   const tickGap = displayTicksY.length > 1 ? plotH / (displayTicksY.length - 1) : plotH
   const sparseLabels = tickGap < AXIS_FONT * 1.3
 
+  // The top tick's label gets pushed DOWN by AXIS_FONT when nearTop (see the
+  // render loop below) -- so its actual final gap to the second-from-top
+  // label is smaller than the raw tickGap the alternation logic above is
+  // based on. Compute that displaced gap here and use it to decide, on top
+  // of the general alternation, whether the second-from-top label
+  // specifically still has room -- otherwise the two labels can overlap
+  // even on a chart sparseLabels considers fine (confirmed on weight at 365d).
+  const topIndex = displayTicksY.length - 1
+  const topYPos = topIndex >= 0 ? y(displayTicksY[topIndex]!) : 0
+  const topNearTop = topYPos < PAD + AXIS_FONT
+  const topPairGap = topNearTop ? tickGap - AXIS_FONT : tickGap
+  const topPairCrowded = displayTicksY.length > 1 && topPairGap < AXIS_FONT * 1.3
+
   const formatValue = (v: number) =>
     Number.isInteger(v)
       ? v.toLocaleString()
@@ -201,7 +214,15 @@ export function Chart({
           // the viewBox -- drop it below the line instead whenever there
           // isn't room above.
           const nearTop = yPos < PAD + AXIS_FONT
-          const labelled = !sparseLabels || (displayTicksY.length - 1 - i) % 2 === 0
+          let labelled = !sparseLabels || (displayTicksY.length - 1 - i) % 2 === 0
+          // The second-from-top tick's label can still overlap the
+          // (displaced) top label even when the general alternation above
+          // says there's room -- suppress it in that specific case.
+          if (i === topIndex - 1 && topPairCrowded) labelled = false
+          // Bar charts union in a zero baseline so bars have a labelled
+          // gridline to grow from -- the alternation above can land on
+          // skipping exactly that label. Zero always wins.
+          if (markType === 'bar' && v === 0) labelled = true
           return (
             <g key={v}>
               <line x1={PAD_LEFT} y1={yPos} x2={W - PAD} y2={yPos} stroke="var(--line)" strokeWidth="1" />
@@ -216,11 +237,25 @@ export function Chart({
             </g>
           )
         })}
-        {ticks.x.map((d) => (
-          <text key={d} x={x(d)} y={H - 2} fontSize={AXIS_FONT} fill="var(--muted)" textAnchor="middle">
-            {d.slice(5)}
-          </text>
-        ))}
+        {ticks.x.map((d, i) => {
+          // The x-scale spans through today at the plot's right edge, so the
+          // last tick's date sits right at that edge -- centering text on it
+          // (textAnchor="middle") pushes half the label past the viewBox and
+          // it gets clipped. Anchor that one label's END at the edge instead,
+          // same approach as the "today (partial)" label below.
+          const isLast = i === ticks.x.length - 1
+          return (
+            <text
+              key={d}
+              x={isLast ? W - PAD : x(d)}
+              y={H - 2}
+              fontSize={AXIS_FONT} fill="var(--muted)"
+              textAnchor={isLast ? 'end' : 'middle'}
+            >
+              {d.slice(5)}
+            </text>
+          )
+        })}
 
         <line
           x1={x(today)} y1={PAD} x2={x(today)} y2={H - AXIS_PAD}

@@ -15,7 +15,7 @@ Spec: `docs/superpowers/specs/2026-08-04-trends-charts-readability-design.md`
 - No charting library — hand-rolled SVG only (spec: Context; issue #5).
 - Gaps are never interpolated and never plotted as zero (existing project-wide rule, unchanged by this work).
 - Today is always excluded from every plotted series/bars — it's a Partial Day (spec: Decisions locked).
-- Every tap/hit target is ≥24px even though the visible mark stays small — mobile-first (spec: Chart component section).
+- Every tap/hit target is as large as the chart's data density allows — full-height bands spanning the midpoint to each neighboring point, not a fixed-size circle (spec: Chart component section). On a chart dense enough (e.g. a year of daily readings, where points land roughly 1 CSS px apart on a typical phone viewport), no per-point hit region can reach a fixed 24px minimum — that's mathematically unreachable at that density, not a bug to fix. The interaction model's actual guarantee is correctly resolving each tap to its *nearest* point, which it does; only a window with few enough points ever reaches 24px per band.
 - This spec reuses the *existing* CSS custom properties in `app/globals.css` (`--bg`, `--panel`, `--line`, `--text`, `--muted`, `--accent`, `--ok`, `--watch`, `--act`, `--unknown`) — no new colors, no site-wide redesign (spec: Context, out of scope).
 - Dashed lines mean "target/threshold" or "today" (the only two dashed elements in any chart); axes and gridlines are always solid hairlines, never dashed (spec: Chart component section). The today-marker and a target line can coexist on one chart — orientation (vertical vs. horizontal) disambiguates them.
 - Bars always grow from y=0, never a truncated baseline (spec: Chart component section).
