@@ -1,6 +1,6 @@
 import { loadLatestSleep, loadSignals } from '../../lib/queries.js'
 import { describeSleepAge, formatSleepDuration } from '../../lib/sleep.js'
-import { SignalCard } from '../ui.js'
+import { SignalCard, signalHref } from '../ui.js'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +12,7 @@ export default async function Coach() {
   return (
     <main>
       <h2>Signals</h2>
-      {sorted.map((s) => <SignalCard key={s.id} signal={s} />)}
+      {sorted.map((s) => <SignalCard key={s.id} signal={s} href={signalHref(s.id)} />)}
       <p className="empty" style={{ marginTop: '1.5rem' }}>
         Every verdict here is a deterministic rule over the data, not a judgement
         call — the logic lives in <code>lib/signals/</code> and is unit-tested.

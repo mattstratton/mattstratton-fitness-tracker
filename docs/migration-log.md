@@ -621,6 +621,96 @@ blocks, which carry current weights) plus the last `dayName` in history. It just
 isn't the elegant thing that was promised, and the decision to skip hardcoding
 GZCLP now rests on a different, weaker foundation than the one recorded.
 
+## Building the fallback parser (#7 + #11): three more things the real program text didn't match the plan
+
+The fallback recorded above got built as a real `/workouts` page — a "next up"
+preview plus full session history, combined with issue #11's separate ask for
+more workout detail in general. Before writing the parser, its design was
+checked against Matty's actual live "GZCLP: Blacknoir version" program
+(`viohtrec`, fetched via the Liftosaur MCP's `get_program`/`get_history`), not
+assumed from the day-block syntax sketched above. Good thing — the real text
+disagreed with the plan in three separate ways, each of which would have
+produced silently wrong output if shipped as first imagined.
+
+**1. Exercise lines are reuse references, not literal set schemes, and the
+reference can point FORWARD in the file.** A line like
+
+```
+t1: Squat / ...t1_modified / 207.5lb / warmup: 1x5 45lb, 1x5 50%, 1x5 80%
+```
+
+carries no sets scheme of its own — `2x5, 1x5+` comes from a separate
+`t1_modified / used: none / 2x5, 1x5+ / ...` template line, defined inside
+**Day 4's** block, textually *after* Day 1 references it. A single
+top-to-bottom scan (what a first-draft parser modeled on `lib/signals/tiers.ts`
+would naturally do) resolves Day 1 before it has ever seen the template that
+defines its sets — it would either crash or silently emit `sets: null` for
+every un-progressed T1/T2/T3 exercise in the program, which is most of them.
+Fixed with two passes: collect every `used: none` template first, then walk
+day blocks resolving references against that map.
+
+**2. An exercise repeats every variation inline once it's progressed past the
+template default, and shows none at all while still on it.** Day 2's Overhead
+Press, having advanced past its template's first variation, is written as
+
+```
+t1: Overhead Press / ...t1_modified / 2x5, 1x5+ / ! 3x3, 1x3+ / 4x2, 1x2+ / 1x5 (5RM Test) / 97.5lb / ...
+```
+
+— all four of `t1_modified`'s variations repeated on the exercise's own line,
+with a leading `!` marking which one is current. Day 1's Squat, still on the
+default, has no such repetition at all. Cross-checked against real
+`get_history` records: the oldest Day 2 session's target (`2x5 95lb, 1x5+
+95lb`) matches variation 1; a later one (`3x3 95lb, 1x3+ 95lb`) matches
+variation 2, the one `!` now marks — confirming "prefer an inline `!`-marked
+candidate, else the first inline candidate, else the template's own
+(`!`-marked, else first) variation" against real progression, not a guess.
+
+**3. `training_sessions.label` lags the true "last day," and a real program
+interruption already exists in the data.** Querying it live, the day this was
+built (2026-08-04):
+
+```
+observed_on  label                          set_count
+2026-08-04   Traditional Strength Training   (blank)
+2026-08-02   Day 4                          11
+```
+
+Today's session — synced via the Liftosaur MCP moments earlier — hadn't been
+picked up by the `sync-liftosaur` cron yet, so `training_sessions` still
+showed Apple Health's generic fallback label for it. `lifting_records.day_name`
+(queried directly) doesn't carry that lag; it's what the cron actually
+populates. Separately, `lifting_records.program` genuinely shows a real
+interruption: `"Hotel Travel Week"` on 2026-07-27 and 2026-07-29, sandwiched
+between GZCLP sessions. An unfiltered "most recent record" query would read a
+future travel week the same way — restarting the GZCLP cycle at Day 1 instead
+of correctly resuming where it left off — so the "last day" lookup filters by
+the *current* program's own name.
+
+**One design question Matty raised directly, and the fix:** the sets-scheme
+matching was first written to match a segment *exactly* — `"2x5"`, nothing
+else — tuned to how Blacknoir happens to write templates. Asked point-blank
+whether that would be too brittle if he ever switched to a differently-written
+program (5/3/1 was the example), the answer was yes for one specific case:
+5/3/1's real inline style writes something like `1x5 65%, 1x5 75%, 1x5+ 85%`,
+which an exact match wouldn't recognize as a sets scheme at all. Broadened to
+"segment *contains* an `NxR`-shaped token" instead — one regex change, no
+architecture change, and it now resolves both styles. Filed as a test case
+(a synthetic day-headered, template-free, percentage-based exercise line)
+specifically because the existing 5/3/1 fixture already in this repo's test
+suite (real text, no day headers at all) can't exercise it — that program
+would just make the whole preview go quiet, correctly, per the "render
+nothing rather than guess" rule, and never reach the sets-parsing code at all.
+
+**The measured consequence of the sync lag, seen directly rather than
+theorized:** because `lifting_records`'s most recent GZCLP row was still "Day
+4" (from 2026-08-02) at verification time — today's real Day 1 session not
+yet synced — the shipped preview computed "Day 1" as next up. The actual next
+session, given the untracked real session, is "Day 2." This is the exact
+same eventual-consistency property `data_freshness` already has elsewhere in
+this app, not a new gap this feature introduces — noted here because it was
+observed happening in real time while building this, not inferred afterward.
+
 ## Numbers to re-measure before publishing
 
 - [x] Compression: **8.8×** on Tiger Cloud, clean load. Note honestly that the backfill
@@ -648,6 +738,12 @@ GZCLP now rests on a different, weaker foundation than the one recorded.
       through 2026-08-04) **all** have a recorded night. Whether that's a genuine recent uptick
       in watch-wear or a short streak inside an otherwise-sparse year needs a real query over a
       longer window before either number gets quoted in a writeup — see the entry below.
+- [ ] The `/workouts` next-up preview's one-cycle sync lag (#7/#11 entry below): on 2026-08-04,
+      `lifting_records`'s most recent GZCLP row was still "Day 4" from 2026-08-02, with a real
+      Day 1 session performed that same day not yet synced — so the preview computed "Day 1" as
+      next when the true next day (given the untracked session) was "Day 2." A one-off, timestamped
+      observation, not a constant; re-check whether the lag is still ~1 sync cycle or has changed
+      before quoting it, and don't assume "Day 4"/"Day 1" specifically still holds by then.
 
 ## Sleep display added, and the "~7% coverage" assumption checked against live data (#10)
 

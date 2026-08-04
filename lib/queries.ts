@@ -5,13 +5,14 @@
 // exception, for the /settings page.
 import { getPool } from './db.js'
 import type { Phase, Targets } from './config.js'
+import { nextWorkoutDay, parseProgramDays } from './liftoscriptProgram.js'
 import { deficitReality, weightTrend } from './signals/body.js'
 import { freshness } from './signals/freshness.js'
 import { recentMisses, stalling } from './signals/lifting.js'
 import { calorieAdherence, loggingGaps, proteinAdherence } from './signals/nutrition.js'
 import { overreaching } from './signals/recovery.js'
 import { parseTiers } from './signals/tiers.js'
-import type { Signal } from './signals/types.js'
+import type { LiftingSetRow, Signal } from './signals/types.js'
 
 const day = (v: unknown): string =>
   v instanceof Date ? v.toISOString().slice(0, 10) : String(v)
@@ -21,9 +22,12 @@ async function rows<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   return (await getPool().query(sql, params)).rows as T[]
 }
 
-/** Exercise → tier, from the live program. Returns undefined if unreachable:
- *  a missing hint must degrade the stall rule, never break the page. */
-async function liftosaurTiers(): Promise<Map<string, 't1' | 't2' | 't3'> | undefined> {
+/** Raw fetch of the live Liftoscript program source, bypassing a proper MCP
+ *  client (there isn't one wired up server-side). Returns undefined on any
+ *  failure -- a missing hint must degrade, never break the page. Shared by
+ *  liftosaurTiers() and loadNextWorkoutPreview(), which both need the same
+ *  program text for different purposes. */
+async function fetchLiftoscriptProgram(): Promise<{ name: string; text: string } | undefined> {
   const key = process.env['LIFTOSAUR_API_KEY']
   if (!key) return undefined
   try {
@@ -44,7 +48,62 @@ async function liftosaurTiers(): Promise<Map<string, 't1' | 't2' | 't3'> | undef
     const body = (await res.json()) as { result?: { content?: Array<{ text?: string }> } }
     const text = body.result?.content?.[0]?.text
     if (!text) return undefined
-    return parseTiers(JSON.parse(text).text as string)
+    const parsed = JSON.parse(text) as { name?: string; text?: string }
+    if (!parsed.text) return undefined
+    return { name: parsed.name ?? '', text: parsed.text }
+  } catch {
+    return undefined
+  }
+}
+
+/** Exercise → tier, from the live program. Returns undefined if unreachable:
+ *  a missing hint must degrade the stall rule, never break the page. */
+async function liftosaurTiers(): Promise<Map<string, 't1' | 't2' | 't3'> | undefined> {
+  const program = await fetchLiftoscriptProgram()
+  return program ? parseTiers(program.text) : undefined
+}
+
+export type NextWorkoutPreview = {
+  dayName: string
+  exercises: Array<{ tier: 't1' | 't2' | 't3' | null; name: string; weightLbs: number | null; sets: string | null }>
+}
+
+/**
+ * The next day in the live program's rotation, with its prescribed
+ * exercises/weights -- the derived fallback for the "next workout" preview,
+ * since run_playground doesn't work (docs/migration-log.md: every argument
+ * shape returns `exercises: {}` even though `stats` is correct).
+ *
+ * Wrapped in a single try/catch: this inherits liftosaurTiers()'s "a missing
+ * hint must degrade, never break the page" contract for the new SQL query
+ * here too, not just the fetch.
+ */
+export async function loadNextWorkoutPreview(): Promise<NextWorkoutPreview | undefined> {
+  try {
+    const program = await fetchLiftoscriptProgram()
+    if (!program) return undefined
+    const days = parseProgramDays(program.text)
+    if (days.length === 0) return undefined
+
+    // lifting_records.day_name, not training_sessions.label -- the view can
+    // still show Apple Health's generic fallback label for a session the
+    // sync-liftosaur cron hasn't picked up yet. Filtered by the CURRENT
+    // program's name so a travel-week interruption (a real thing that has
+    // happened) resumes the cycle where it left off instead of restarting it.
+    const r = await rows<Record<string, unknown>>(
+      `SELECT day_name FROM lifting_records WHERE program = $1 ORDER BY started_at DESC LIMIT 1`,
+      [program.name],
+    )
+    const lastDayName = r[0] ? (r[0]['day_name'] as string | null) : null
+    const next = nextWorkoutDay(days, lastDayName)
+    if (!next) return undefined
+
+    return {
+      dayName: next.name,
+      exercises: next.exercises.map((e) => ({
+        tier: e.tier, name: e.name, weightLbs: e.weightLbs, sets: e.sets,
+      })),
+    }
   } catch {
     return undefined
   }
@@ -262,12 +321,71 @@ export async function loadWeightTrendLine(
   }
 }
 
+export type LiftingSessionSummary = {
+  recordId: number
+  observedOn: string
+  startedAt: string
+  program: string | null
+  label: string | null
+  durationMin: number | null
+  energyKcal: number | null
+  setCount: number
+}
+
+/** Recent lifting sessions with real metadata -- training_sessions doesn't
+ *  expose record_id directly, so this joins back to lifting_records on
+ *  started_at (exact, not fuzzy: the view passes r.started_at through
+ *  unchanged for lifting rows). Flat LIMIT, no pagination -- matches
+ *  /settings' loadTargetHistory(limit = 10) precedent for a history list in
+ *  this single-user app. */
+export async function loadRecentLiftingSessions(limit = 20): Promise<LiftingSessionSummary[]> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT r.record_id, ts.observed_on, ts.started_at, ts.program, ts.label,
+            ts.duration_min, ts.energy_kcal, ts.set_count
+     FROM lifting_records r
+     JOIN training_sessions ts ON ts.kind = 'lifting' AND ts.started_at = r.started_at
+     ORDER BY r.started_at DESC
+     LIMIT $1`,
+    [limit],
+  )
+  return r.map((row) => ({
+    recordId: Number(row['record_id']),
+    observedOn: day(row['observed_on']),
+    startedAt: String(row['started_at']),
+    program: row['program'] as string | null,
+    label: row['label'] as string | null,
+    durationMin: num(row['duration_min']),
+    energyKcal: num(row['energy_kcal']),
+    setCount: Number(row['set_count']),
+  }))
+}
+
+/** Full ordered set log for a batch of sessions -- the /workouts history
+ *  section's set-by-set detail. Short-circuits on an empty array rather than
+ *  sending `= ANY('{}')` to the pool. */
+export async function loadLiftingSetsForRecords(recordIds: number[]): Promise<LiftingSetRow[]> {
+  if (recordIds.length === 0) return []
+  const r = await rows<Record<string, unknown>>(
+    `SELECT performed_on, record_id, exercise, set_index, reps, weight_lbs, target_reps, is_amrap
+     FROM lifting_sets
+     WHERE record_id = ANY($1::bigint[])
+     ORDER BY record_id, exercise, set_index`,
+    [recordIds],
+  )
+  return r.map((row) => ({
+    performedOn: day(row['performed_on']), recordId: Number(row['record_id']),
+    exercise: String(row['exercise']), setIndex: Number(row['set_index']), reps: Number(row['reps']),
+    weightLbs: num(row['weight_lbs']), targetReps: num(row['target_reps']),
+    isAmrap: row['is_amrap'] === null ? null : Boolean(row['is_amrap']),
+  }))
+}
+
 export async function loadToday(): Promise<{
   weightLbs: number | null
   proteinG: number | null
   caloriesIn: number | null
   steps: number | null
-  lastSession: { observedOn: string; label: string | null; setCount: number | null } | null
+  lastSession: { observedOn: string; label: string | null; setCount: number | null; recordId: number } | null
 }> {
   const [metrics, session] = await Promise.all([
     // Today comes from the RAW Report log, not observations_daily.
@@ -288,9 +406,14 @@ export async function loadToday(): Promise<{
          AND metric IN ('weight_lbs','protein_g','calories','steps')
        ORDER BY metric, reported_at DESC`,
     ),
+    // training_sessions doesn't expose record_id directly (see
+    // loadRecentLiftingSessions) -- same lifting_records join, needed here so
+    // the glance page's "Last session" line can link to the right session.
     rows<Record<string, unknown>>(
-      `SELECT observed_on, label, set_count FROM training_sessions
-       WHERE kind = 'lifting' ORDER BY started_at DESC LIMIT 1`,
+      `SELECT r.record_id, ts.observed_on, ts.label, ts.set_count
+       FROM lifting_records r
+       JOIN training_sessions ts ON ts.kind = 'lifting' AND ts.started_at = r.started_at
+       ORDER BY r.started_at DESC LIMIT 1`,
     ),
   ])
   const get = (m: string) => num(metrics.find((r) => r['metric'] === m)?.['value'])
@@ -301,7 +424,10 @@ export async function loadToday(): Promise<{
     caloriesIn: get('calories'),
     steps: get('steps'),
     lastSession: s
-      ? { observedOn: day(s['observed_on']), label: s['label'] as string | null, setCount: num(s['set_count']) }
+      ? {
+          observedOn: day(s['observed_on']), label: s['label'] as string | null,
+          setCount: num(s['set_count']), recordId: Number(s['record_id']),
+        }
       : null,
   }
 }

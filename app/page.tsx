@@ -1,6 +1,6 @@
 import { loadLatestSleep, loadSignals, loadToday } from '../lib/queries.js'
 import { isSleepRecent } from '../lib/sleep.js'
-import { SignalCard, SleepTile, Tile } from './ui.js'
+import { SignalCard, signalHref, SleepTile, Tile } from './ui.js'
 
 // Always live: a coaching glance that shows cached numbers is worse than none.
 export const dynamic = 'force-dynamic'
@@ -35,21 +35,24 @@ export default async function Today() {
       ) : (
         sorted
           .filter((s) => s.status === 'act' || s.status === 'watch')
-          .map((s) => <SignalCard key={s.id} signal={s} showDetail={false} />)
+          .map((s) => <SignalCard key={s.id} signal={s} showDetail={false} href={signalHref(s.id)} />)
       )}
 
       <h2>Everything else</h2>
       {sorted
         .filter((s) => s.status === 'ok' || s.status === 'unknown')
-        .map((s) => <SignalCard key={s.id} signal={s} showDetail={false} />)}
+        .map((s) => <SignalCard key={s.id} signal={s} showDetail={false} href={signalHref(s.id)} />)}
 
       {today.lastSession ? (
         <>
           <h2>Last session</h2>
-          <p className="empty">
+          <a
+            className="empty"
+            href={`/workouts?session=${today.lastSession.recordId}#session-${today.lastSession.recordId}`}
+          >
             {today.lastSession.observedOn} · {today.lastSession.label ?? 'lifting'} ·{' '}
             {today.lastSession.setCount ?? 0} sets
-          </p>
+          </a>
         </>
       ) : null}
     </main>

@@ -53,6 +53,7 @@ nav a:hover, nav a[data-active] { color: var(--text); }
 .signal { display: flex; gap: .7rem; background: var(--panel);
           border: 1px solid var(--line); border-left-width: 3px;
           border-radius: .5rem; padding: .7rem .85rem; margin-bottom: .5rem; }
+a.signal { text-decoration: none; color: inherit; }
 .signal[data-s="ok"]      { border-left-color: var(--ok); }
 .signal[data-s="watch"]   { border-left-color: var(--watch); }
 .signal[data-s="act"]     { border-left-color: var(--act); }
@@ -62,6 +63,11 @@ nav a:hover, nav a[data-active] { color: var(--text); }
              color: var(--muted); }
 .signal .h { margin-top: .1rem; }
 .signal .d { margin-top: .35rem; font-size: .85rem; color: var(--muted); }
+.next-workout-list { list-style: none; margin: .5rem 0 0; padding: 0; }
+.next-workout-list li { margin-top: .3rem; }
+.next-workout-list .tier { font-size: .65rem; text-transform: uppercase;
+                           color: var(--muted); border: 1px solid var(--line);
+                           border-radius: .3rem; padding: .05rem .3rem; }
 
 .settings-form { display: flex; flex-direction: column; gap: .7rem; max-width: 24rem; }
 .settings-form label { display: flex; flex-direction: column; gap: .3rem;
@@ -85,6 +91,7 @@ nav a:hover, nav a[data-active] { color: var(--text); }
                     font-size: .8rem; color: var(--muted); margin-bottom: .5rem; }
 .chart svg { display: block; width: 100%; height: auto; }
 .empty { color: var(--muted); font-size: .9rem; padding: .5rem 0; }
+a.empty { display: block; text-decoration: none; }
 
 .chart-section-header { display:flex; align-items:baseline; justify-content:space-between;
                          margin:2rem 0 .5rem; }
@@ -111,3 +118,15 @@ nav a:hover, nav a[data-active] { color: var(--text); }
                         touch-action:none; cursor:grab; }
 .chart-modal-panzoom:active { cursor:grabbing; }
 .chart-modal-panzoom .chart { margin-bottom:0; }
+
+.session { background: var(--panel); border: 1px solid var(--line);
+           border-radius: .5rem; padding: .6rem .85rem; margin-bottom: .5rem; }
+.session summary { cursor: pointer; font-size: .9rem; }
+.session summary::marker { color: var(--muted); }
+.session-exercise { margin-top: .6rem; }
+.session-exercise .name { font-size: .8rem; font-weight: 600; }
+.session-exercise ul { list-style: none; margin: .25rem 0 0; padding: 0;
+                        font-size: .85rem; color: var(--muted); }
+.session-exercise li[data-c="failed"] { color: var(--act); }
+.session-exercise li[data-c="short"]  { color: var(--watch); }
+.session-exercise li[data-c="hit"], .session-exercise li[data-c="amrap-hit"] { color: var(--ok); }

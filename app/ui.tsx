@@ -1,4 +1,4 @@
-import type { Point, SleepNight } from '../lib/queries.js'
+import type { NextWorkoutPreview, Point, SleepNight } from '../lib/queries.js'
 import type { Signal } from '../lib/signals/types.js'
 import type { AxisTicks, BarStatus, TrendBand } from '../lib/charting.js'
 import { windowStartDate } from '../lib/charting.js'
@@ -6,14 +6,30 @@ import { describeSleepAge, formatSleepDuration } from '../lib/sleep.js'
 import type { Mark } from './chart-marks.js'
 import { ChartMarks } from './chart-marks.js'
 
-export function SignalCard({ signal, showDetail = true }: { signal: Signal; showDetail?: boolean }) {
-  return (
+/** Which signals have somewhere more detailed to send a reader -- only
+ *  lifting's stalling/misses link anywhere; every other signal has no
+ *  deeper page today, so this stays undefined for them. */
+export function signalHref(id: string): string | undefined {
+  return id === 'stalling' || id === 'misses' ? '/workouts' : undefined
+}
+
+export function SignalCard(
+  { signal, showDetail = true, href }: { signal: Signal; showDetail?: boolean; href?: string | undefined },
+) {
+  const body = (
+    <div className="body">
+      <div className="t">{signal.title}</div>
+      <div className="h">{signal.headline}</div>
+      {showDetail && signal.detail ? <div className="d">{signal.detail}</div> : null}
+    </div>
+  )
+  return href ? (
+    <a href={href} className="signal" data-s={signal.status}>
+      {body}
+    </a>
+  ) : (
     <div className="signal" data-s={signal.status}>
-      <div className="body">
-        <div className="t">{signal.title}</div>
-        <div className="h">{signal.headline}</div>
-        {showDetail && signal.detail ? <div className="d">{signal.detail}</div> : null}
-      </div>
+      {body}
     </div>
   )
 }
@@ -46,6 +62,35 @@ export function SleepTile({ sleep }: { sleep: SleepNight }) {
       <div className="k">Sleep</div>
       <div className="v">{formatSleepDuration(sleep.asleepMin ?? 0)}</div>
       <div className="age">{describeSleepAge(sleep.ageDays)}</div>
+    </div>
+  )
+}
+
+/** The next day's prescribed exercises/weights, derived from the live
+ *  Liftoscript program (see lib/liftoscriptProgram.ts) since run_playground
+ *  doesn't work. Renders a plain fallback line when the preview is
+ *  unavailable -- unreachable Liftosaur, or a program with no `## Day`
+ *  headers -- same "degrade, never break" contract as the rest of this app. */
+export function NextWorkoutCard({ preview }: { preview: NextWorkoutPreview | undefined }) {
+  if (!preview) {
+    return <p className="empty">Next workout preview unavailable.</p>
+  }
+  return (
+    <div className="signal">
+      <div className="body">
+        <div className="t">Next up</div>
+        <div className="h">{preview.dayName}</div>
+        <ul className="next-workout-list">
+          {preview.exercises.map((e, i) => (
+            <li key={i}>
+              {e.tier ? <span className="tier">{e.tier}</span> : null}
+              {' '}{e.name}
+              {e.weightLbs !== null ? ` · ${e.weightLbs}lb` : ''}
+              {e.sets ? ` · ${e.sets}` : ''}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

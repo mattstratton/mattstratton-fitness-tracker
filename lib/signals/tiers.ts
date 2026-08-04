@@ -21,10 +21,14 @@
  * tiers existed. Changing programs degrades the T3 suppression; it breaks
  * nothing.
  *
- * The program-agnostic replacement is to ask Liftosaur, via `run_playground`,
- * what weight it prescribes next: a stall is then "the program wants more weight
- * and history says it hasn't moved", which holds for any progression scheme.
- * That is Phase 4 work and it retires this file.
+ * The program-agnostic replacement was going to be asking Liftosaur, via
+ * `run_playground`, what weight it prescribes next -- that turned out not to
+ * work (docs/migration-log.md: every argument shape returns `exercises: {}`
+ * even though `stats` is correct). `lib/liftoscriptProgram.ts` is the actual
+ * fallback: it parses `## Day N` blocks from the same program text this file
+ * reads, for the "next workout" preview (#7). It doesn't retire this file --
+ * that still only extracts tier, not weights/sets, and the T3-suppression use
+ * case here is unrelated to what the day-block parser does.
  */
 export type Tier = 't1' | 't2' | 't3'
 
