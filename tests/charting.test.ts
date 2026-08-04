@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveMarkType, resolveBarStatus } from '../lib/charting.js'
+import { resolveMarkType, resolveBarStatus, axisTicks } from '../lib/charting.js'
 import type { Point } from '../lib/queries.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
@@ -50,4 +50,19 @@ test('resolveBarStatus: signed zero (maintain) wants a 5% tolerance band', () =>
 
 test('resolveBarStatus: a null target is neutral, never a fabricated miss', () => {
   assert.equal(resolveBarStatus(1900, null, { signedExpected: -1.0 }), 'neutral')
+})
+
+test('axisTicks: x tick count scales with window length', () => {
+  const points30: Point[] = Array.from({ length: 30 }, (_, i) => ({ observedOn: day(i + 1), value: 100 }))
+  assert.equal(axisTicks(points30, 30).x.length, 3)
+})
+
+test('axisTicks: y ticks are rounded to clean steps, not raw min/max', () => {
+  const points: Point[] = [{ observedOn: day(1), value: 213 }, { observedOn: day(2), value: 287 }]
+  const ticks = axisTicks(points, 90)
+  assert.deepEqual(ticks.y, [200, 220, 240, 260, 280, 300])
+})
+
+test('axisTicks: empty points yields no ticks', () => {
+  assert.deepEqual(axisTicks([], 90), { x: [], y: [] })
 })

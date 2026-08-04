@@ -40,3 +40,53 @@ export function resolveBarStatus(
   const tolerance = target * 0.05
   return Math.abs(value - target) <= tolerance ? 'hit' : 'miss'
 }
+
+const DAY_MS = 86_400_000
+const daysBetween = (a: string, b: string): number =>
+  Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS)
+
+export type AxisTicks = { x: string[]; y: number[] }
+
+/** A "nice" step size (1/2/5 x 10^n) for roughly `targetCount` gridlines. */
+function niceStep(range: number, targetCount: number): number {
+  const roughStep = range / targetCount
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)))
+  const residual = roughStep / magnitude
+  const step = residual >= 5 ? 10 : residual >= 2 ? 5 : residual >= 1 ? 2 : 1
+  return step * magnitude
+}
+
+/**
+ * X ticks: a handful of evenly-spaced dates, never one per point -- a tick
+ * per point is chaos on a 90-point series. Y ticks: rounded to clean values,
+ * not the raw min/max, so the gridlines read as round numbers.
+ */
+export function axisTicks(points: Point[], windowDays: number): AxisTicks {
+  if (points.length === 0) return { x: [], y: [] }
+
+  const first = points[0]!.observedOn
+  const last = points[points.length - 1]!.observedOn
+  const span = daysBetween(first, last)
+  const xCount: number = windowDays <= 30 ? 3 : windowDays <= 90 ? 4 : 5
+
+  const x: string[] = []
+  for (let i = 0; i < xCount; i++) {
+    const frac = xCount === 1 ? 0 : i / (xCount - 1)
+    const offset = Math.round(span * frac)
+    x.push(new Date(Date.parse(first) + offset * DAY_MS).toISOString().slice(0, 10))
+  }
+
+  const values = points.map((p) => p.value)
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const step = niceStep(hi - lo || 1, 4)
+  const niceLo = Math.floor(lo / step) * step
+  const niceHi = Math.ceil(hi / step) * step
+
+  const y: number[] = []
+  for (let v = niceLo; v <= niceHi + step / 1000; v += step) {
+    y.push(Math.round(v * 100) / 100)
+  }
+
+  return { x, y }
+}
