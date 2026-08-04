@@ -110,7 +110,12 @@ Liftosaur MCP), so coaching on a phone had no other route.
   which served a stale 688 kcal against a real 1556. See `lib/queries.ts`.
 - Charts never interpolate across gaps and tiles never show 0 for unlogged.
 - Auth: `lib/allowlist.ts` is the security boundary. `proxy.ts` guards the UI and
-  deliberately excludes `/api` so HAE and the crons work.
+  deliberately excludes `/api` so HAE and the crons work. Google sign-in
+  doesn't work against `localhost` (no local redirect URI is registered), so
+  for local dev only, set `DEV_BYPASS_AUTH=1` to skip the gate entirely — see
+  `lib/devBypass.ts`. It can't take effect on anything Vercel deploys: that
+  always runs with `NODE_ENV=production`, which the bypass also requires
+  *not* be true.
 
 `npm run dev` locally; `npm test` and `npm run typecheck` before pushing.
 
