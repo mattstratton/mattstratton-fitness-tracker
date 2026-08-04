@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveMarkType, resolveBarStatus, axisTicks, computeTrendBand } from '../lib/charting.js'
+import {
+  resolveMarkType, resolveBarStatus, axisTicks, computeTrendBand, windowStartDate,
+} from '../lib/charting.js'
 import type { Point } from '../lib/queries.js'
 import type { Targets } from '../lib/config.js'
 
@@ -66,6 +68,24 @@ test('axisTicks: y ticks are rounded to clean steps, not raw min/max', () => {
 
 test('axisTicks: empty points yields no ticks', () => {
   assert.deepEqual(axisTicks([], 90), { x: [], y: [] })
+})
+
+test('axisTicks: windowStart spaces dates across the window, not the data extent', () => {
+  // Data clustered in the last week of a 30-day window. Without windowStart the
+  // labels bunch into that week; with it they span the whole plotted range.
+  const clustered: Point[] = [
+    { observedOn: '2026-07-25', value: 100 },
+    { observedOn: '2026-07-31', value: 110 },
+  ]
+  assert.deepEqual(axisTicks(clustered, 30).x, ['2026-07-25', '2026-07-28', '2026-07-31'])
+  assert.deepEqual(
+    axisTicks(clustered, 30, '2026-07-02').x,
+    ['2026-07-02', '2026-07-17', '2026-08-01'],
+  )
+})
+
+test('windowStartDate: the window opens windowDays before today', () => {
+  assert.equal(windowStartDate('2026-08-01', 30), '2026-07-02')
 })
 
 test('computeTrendBand: null regression yields no overlay', () => {

@@ -12,6 +12,15 @@ export type MarkType = 'line' | 'bar'
  *  baseline are more legible for a sparse series. */
 const SPARSE_THRESHOLD = 0.5
 
+/**
+ * ONLY call this for metrics that have a hit/miss target to colour bars
+ * against -- protein and calories. Bars grow from zero, which is a claim that
+ * zero is the meaningful baseline; for weight, resting HR and HRV it isn't
+ * (nobody weighs zero), so a bar's height there encodes nothing. Coverage
+ * alone can't tell you that: at a 365-day window weight/RHR/HRV all fall under
+ * the threshold and would silently become misleading bar charts. The caller
+ * decides which metrics may ever be bars; this decides whether they should be.
+ */
 export function resolveMarkType(points: Point[], windowDays: number): MarkType {
   if (windowDays <= 0) return 'line'
   return points.length / windowDays < SPARSE_THRESHOLD ? 'bar' : 'line'
@@ -48,6 +57,16 @@ const daysBetween = (a: string, b: string): number =>
 
 export type AxisTicks = { x: string[]; y: number[] }
 
+/**
+ * The left edge of a chart's window: `windowDays` before `today`. The Chart's
+ * x-scale and `axisTicks`' date labels both need this and they MUST agree --
+ * when they drifted apart the labels described a different range than the
+ * marks were plotted against. One function, imported by both.
+ */
+export function windowStartDate(today: string, windowDays: number): string {
+  return new Date(Date.parse(today) - windowDays * DAY_MS).toISOString().slice(0, 10)
+}
+
 /** A "nice" step size (1/2/5 x 10^n) for roughly `targetCount` gridlines. */
 function niceStep(range: number, targetCount: number): number {
   const roughStep = range / targetCount
@@ -61,13 +80,21 @@ function niceStep(range: number, targetCount: number): number {
  * X ticks: a handful of evenly-spaced dates, never one per point -- a tick
  * per point is chaos on a 90-point series. Y ticks: rounded to clean values,
  * not the raw min/max, so the gridlines read as round numbers.
+ *
+ * `windowStart` should be passed whenever the caller's x-scale spans the whole
+ * requested window rather than just the data's own extent -- which the Chart's
+ * does. Without it the labels are spaced across `points[0]..points[last]`, so
+ * a series clustered in part of the window gets its date labels bunched into
+ * that cluster while most of the axis goes unlabeled. Optional only so the
+ * data-extent behaviour stays available (and the existing tests keep passing).
  */
-export function axisTicks(points: Point[], windowDays: number): AxisTicks {
+export function axisTicks(points: Point[], windowDays: number, windowStart?: string): AxisTicks {
   if (points.length === 0) return { x: [], y: [] }
 
-  const first = points[0]!.observedOn
-  const last = points[points.length - 1]!.observedOn
-  const span = daysBetween(first, last)
+  const first = windowStart ?? points[0]!.observedOn
+  const span = windowStart === undefined
+    ? daysBetween(points[0]!.observedOn, points[points.length - 1]!.observedOn)
+    : windowDays
   const xCount: number = windowDays <= 30 ? 3 : windowDays <= 90 ? 4 : 5
 
   const x: string[] = []
