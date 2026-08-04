@@ -133,6 +133,29 @@ test('the same record parses identically twice (hash is stable)', () => {
   assert.notEqual(parseRecord(RECORD).record.textHash, parseRecord({ ...RECORD, text: RECORD.text + ' ' }).record.textHash)
 })
 
+test('parseSets handles unilateral per-side reps ("N|N")', () => {
+  // Real data: Liftosaur writes dumbbell/unilateral exercises as
+  // "2x12|12 20lb" (both arms did 12) rather than plain "2x12 20lb". Found by
+  // building /workouts (#7/#11): Incline Curl and Bicep Curl were silently
+  // dropped entirely from lifting_sets for every session that used this
+  // notation -- SET_GROUP_RE didn't match it, so parseSets returned []
+  // for the whole exercise, not just a malformed set.
+  assert.deepEqual(parseSets('2x12|12 20lb, 1x8|8 20lb, 1x10|10 20lb'), [
+    { reps: 12, weightLbs: 20 },
+    { reps: 12, weightLbs: 20 },
+    { reps: 8, weightLbs: 20 },
+    { reps: 10, weightLbs: 20 },
+  ])
+})
+
+test('parseSets takes the weaker side when per-side reps genuinely differ', () => {
+  // Never observed in real data yet (every real "N|M" so far has N === M),
+  // but the schema stores one reps integer per set -- the weaker side is
+  // what actually limits progression in a program like GZCLP, so it wins
+  // rather than being averaged or silently dropped.
+  assert.deepEqual(parseSets('1x10|8 20lb'), [{ reps: 8, weightLbs: 20 }])
+})
+
 test('0lb means bodyweight, and is stored the same way as no weight at all', () => {
   // Real data: 52 sets across plank, crunch, hanging leg raise and bodyweight
   // squat arrive as "0lb". A CHECK constraint (weight_lbs > 0) caught this on

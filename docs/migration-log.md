@@ -744,6 +744,76 @@ observed happening in real time while building this, not inferred afterward.
       next when the true next day (given the untracked session) was "Day 2." A one-off, timestamped
       observation, not a constant; re-check whether the lag is still ~1 sync cycle or has changed
       before quoting it, and don't assume "Day 4"/"Day 1" specifically still holds by then.
+- [ ] Unilateral-notation data loss scope (**3 of 192 records**, the full live history as of
+      2026-08-04, `hasMore: false`): re-scan before publishing in case more sessions with
+      dumbbell/unilateral work have landed since, which would change the count without changing
+      the underlying bug.
+
+## An entire exercise, silently missing — found by displaying real data, not by a test
+
+Building `/workouts`' session history (the entry above) surfaced a real, months-old
+data-loss bug in the Liftosaur sync — found because Matty compared the new page
+against the real Liftosaur app screenshot and noticed Incline Curl just wasn't
+there at all, not that its numbers were wrong.
+
+**What was happening:** Liftosaur writes unilateral/dumbbell exercises with reps
+per side — `2x12|12 20lb` (both arms did 12), not the plain `2x5 215lb` shape
+every existing test fixture used. `SET_GROUP_RE` in `lib/parse/liftohistory.ts`
+didn't match the `|` at all, so `SET_GROUP_RE.exec(...)` returned `null` for
+every group in that segment, and `parseSets` silently `continue`d past all of
+them. The exercise didn't get corrupted sets — it produced **zero** sets,
+for the whole session, and nothing in the pipeline noticed: no thrown error,
+no failed constraint, just an exercise that quietly never made it into
+`lifting_sets`.
+
+**How wide:** scanned the full live history (192 records, confirmed
+`hasMore: false` — not a sample) via the Liftosaur MCP for any performed-set
+segment containing `|`. Exactly 3 records affected, across two exercises:
+Incline Curl (2026-07-23, 2026-08-02, both real GZCLP Day 4 sessions) and
+Bicep Curl (2026-07-29, the "Hotel Travel Week" interruption already on
+record elsewhere in this log). Every real occurrence found so far has
+identical reps on both sides (`12|12`, `8|8`, `10|10`, `9|9`, `20|20`) — no
+genuine left/right asymmetry has actually happened yet.
+
+**The fix:** `SET_GROUP_RE` now accepts an optional `|(\d+)` second-reps group;
+`parseSets` takes `Math.min` of the two sides when both are present. Chosen
+deliberately over averaging or taking the first side: in a program like GZCLP,
+the weaker side is what actually limits whether the exercise counts as
+progressing, the same logic already applied to a AMRAP `reps: 0` counting as a
+real failed set rather than being discarded. Since every real case so far is
+symmetric, this choice is currently unobservable in the data — worth
+revisiting if Matty ever has a genuine per-side split, but not before, per this
+codebase's own rule against solving for cases that haven't happened.
+
+**What does NOT recover the missing history for free:** `syncLiftosaur`'s
+whole optimization is skipping unchanged records via `text_hash` (a hash of
+Liftosaur's own raw text) — and the raw text for these 3 records hasn't
+changed, so simply re-running the fixed parser against a normal sync leaves
+the gap in place. Recovering the already-missing Incline Curl/Bicep Curl sets
+needs those 3 records' stored `text_hash` invalidated first, forcing
+`syncLiftosaur` to treat them as changed and reprocess with the fixed parser
+on the next run — a deliberate one-time, explicitly-approved data correction,
+not something the parser fix does by itself.
+
+**Done, with Matty's explicit go-ahead:** `text_hash` cleared for exactly those
+3 `record_id`s (`ALLOW_WRITES=1 npm run q "UPDATE lifting_records SET
+text_hash = '' WHERE record_id IN (...)"`), then `npm run sync-liftosaur` —
+`192 records seen, 3 changed (42 sets written), 0 pruned`. Exactly the 3
+targeted records changed, nothing else swept in. Verified the recovered rows
+match the real Liftosaur data exactly: Incline Curl 12/12/8/10 reps @ 20lb
+(2026-08-02), 12/12/12/20 @ 15lb (2026-07-23), Bicep Curl 10/9/10 @ 20lb
+(2026-07-29) — all now present in `lifting_sets` and rendering on `/workouts`.
+
+**The broader pattern, worth naming:** this is the second time in this
+project that "no test failed" and "the pipeline ran clean" turned out to mean
+nothing, once real data got looked at directly rather than assumed to match
+the fixtures on file (see also: the `run_playground` entry above, and the
+`inBed: 0` / `totalSleep: 0` fallback bugs in the HAE parser). Every fixture
+this parser had before today used plain `NxR` notation because that's what
+the person writing the fixtures had seen. The bug was invisible for as long
+as nothing in the app ever showed a full, real, per-exercise set list next to
+what Liftosaur itself shows — which is exactly what building `/workouts`
+finally did.
 
 ## Sleep display added, and the "~7% coverage" assumption checked against live data (#10)
 

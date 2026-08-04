@@ -13,8 +13,10 @@ import { createHash } from 'node:crypto'
 import { KG_TO_LBS, localDay, parseInstant } from '../domain.js'
 import type { LiftingRecord, LiftingSet } from '../domain.js'
 
-// "3x5 215lb", "1x13 88.75lb", "2x5 60kg @8", "3x12" (bodyweight)
-const SET_GROUP_RE = /^(\d+)x(\d+)(?:\s+([\d.]+)\s*(lb|kg))?(?:\s+@[\d.]+)?$/
+// "3x5 215lb", "1x13 88.75lb", "2x5 60kg @8", "3x12" (bodyweight), and
+// "2x12|12 20lb" (a unilateral/dumbbell exercise -- Liftosaur writes reps per
+// side; the second number is optional and only appears on these).
+const SET_GROUP_RE = /^(\d+)x(\d+)(?:\|(\d+))?(?:\s+([\d.]+)\s*(lb|kg))?(?:\s+@[\d.]+)?$/
 // Same, but reps may carry a trailing "+" for AMRAP ("1x5+ 215lb"), and a rest
 // timer ("90s") may follow the weight on T3 accessory targets.
 const TARGET_GROUP_RE =
@@ -40,15 +42,18 @@ function toLbs(amount: string | undefined, unit: string | undefined): number | n
   return unit === 'kg' ? n * KG_TO_LBS : n
 }
 
-/** '2x5 125lb, 1x6 125lb' -> three sets. */
+/** '2x5 125lb, 1x6 125lb' -> three sets. '2x12|12 20lb' -> two sets of 12
+ *  (a unilateral exercise; the weaker side wins when the two differ, since
+ *  that's what actually limits progression -- never observed yet, every
+ *  real "N|M" so far has N === M). */
 export function parseSets(segment: string): ParsedSet[] {
   const out: ParsedSet[] = []
   for (const group of segment.split(',')) {
     const m = SET_GROUP_RE.exec(group.trim())
     if (!m) continue
     const count = Number(m[1])
-    const reps = Number(m[2])
-    const weightLbs = toLbs(m[3], m[4])
+    const reps = m[3] !== undefined ? Math.min(Number(m[2]), Number(m[3])) : Number(m[2])
+    const weightLbs = toLbs(m[4], m[5])
     for (let i = 0; i < count; i++) out.push({ reps, weightLbs })
   }
   return out
