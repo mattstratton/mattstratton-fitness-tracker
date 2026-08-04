@@ -633,3 +633,23 @@ GZCLP now rests on a different, weaker foundation than the one recorded.
       alone — get the real `git diff --stat`).
 - [ ] Query timing on a representative `/coach` question, SQLite vs Tiger Cloud. Expect
       SQLite to win on a local 840KB file; say so if it does.
+
+## Trends charts readability — two real findings from rendering (#5)
+
+### 1. Trend band geometry excluded from axis scaling (critical rendering bug)
+
+A weight chart's expected-vs-concerning band (from `computeTrendBand`) was computed correctly but excluded from the axis range calculation in `app/ui.tsx`. The band polygon draws regression-fitted boundaries across the full window: a 90-day weight chart with values 210–222 and cut targets (expected −1.0, concerning 0.75) generates band limits at 199.75–225. The axis calculation folded only the observed values (210–222) plus raw tick suggestions into `lo`/`hi`, missing the polygon coordinates entirely. Result: the band extended from y≈110 in a 90-unit-tall viewBox, clipped and covering ~90% of the plot area, rendering every reading as "on track" regardless of actual trend.
+
+Code review caught this before a render, but it's a canonical "something looked right in isolation" case: the band geometry was correct, the scale logic was correct, and they simply weren't composed together.
+
+**Fix:** folded `trendBand.band` point values into `lo`/`hi` before computing the scale, along with `trendBand.trendLine`. Numeric check: band y-coords then landed at 13.4–68 (inside the plot area 6–74), and the chart now correctly shows when a trend overshoots the target.
+
+### 2. SVG text on mobile: viewport scaling is not what the code looks like
+
+Axis text across all charts was hardcoded `fontSize="8"` (user units in a 600-unit viewBox). On a 390px-wide phone (accounting for app chrome, ~330px available), the viewBox scales by factor 330/600 ≈ 0.554. That renders 8 user units at ≈4.4 CSS pixels — illegible, especially for the y-axis numbers most users would want to glance at.
+
+Discovered during Task 6's review phase; the `Chart` component had shipped without mobile testing. A reasonable reading of the code — "set a font size, place a label" — completely misses that SVG viewport scaling is not a linear visual property once you factor in actual device widths.
+
+**Fix:** replaced all hardcoded `fontSize="8"` with `fontSize="16"` (AXIS_FONT constant). Renders at ≈8.9 CSS pixels on the same phone — roughly double, and legible. Coordinate scaling math was already correct; only the text sizing needed adjustment.
+
+**Broader finding:** this is the second render-only bug in the charting work, following the "water bucket outside the container" trend-band bug. The app is server-rendered, so neither of these would have surfaced without an actual browser, and neither is expressible as a test. Pair with the settings page's OAuth localhost limitation — local dev's `next build` and typecheck both pass while the app is undeployed and untested in a real viewport.
