@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveMarkType, resolveBarStatus, axisTicks } from '../lib/charting.js'
+import { resolveMarkType, resolveBarStatus, axisTicks, computeTrendBand } from '../lib/charting.js'
 import type { Point } from '../lib/queries.js'
+import type { Targets } from '../lib/config.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
 
@@ -65,4 +66,23 @@ test('axisTicks: y ticks are rounded to clean steps, not raw min/max', () => {
 
 test('axisTicks: empty points yields no ticks', () => {
   assert.deepEqual(axisTicks([], 90), { x: [], y: [] })
+})
+
+test('computeTrendBand: null regression yields no overlay', () => {
+  const points: Point[] = [{ observedOn: day(1), value: 275 }, { observedOn: day(2), value: 274 }]
+  const target: Targets = { phase: 'cut', proteinG: 198, calories: 1660, expected: -1.0, concerning: 1.5 }
+  assert.equal(computeTrendBand(points, null, target), null)
+})
+
+test('computeTrendBand: trend line follows the regression, band widens by concerning', () => {
+  const points: Point[] = [{ observedOn: day(1), value: 275 }, { observedOn: day(8), value: 274 }]
+  // slope -1 lb/week = -1/7 lb/day, anchored so day(1) (referenceDate) = 275
+  const regression = { slope: -1 / 7, intercept: 275, referenceDate: day(1) }
+  const target: Targets = { phase: 'cut', proteinG: 198, calories: 1660, expected: -1.0, concerning: 1.5 }
+  const result = computeTrendBand(points, regression, target)
+  assert.ok(result)
+  assert.equal(result.trendLine[0].value, 275)
+  assert.equal(Math.round(result.trendLine[1].value * 100) / 100, 274)
+  assert.equal(result.band[0].value, 275)
+  assert.equal(Math.round(result.band[2].value * 100) / 100, 275.5)
 })

@@ -4,6 +4,7 @@
 // caller needs (today's date, a regression result, the current targets) is
 // passed in explicitly so this stays fixture-testable.
 import type { Point } from './queries.js'
+import type { Targets } from './config.js'
 
 export type MarkType = 'line' | 'bar'
 
@@ -89,4 +90,54 @@ export function axisTicks(points: Point[], windowDays: number): AxisTicks {
   }
 
   return { x, y }
+}
+
+export type Regression = { slope: number; intercept: number; referenceDate: string }
+
+export type TrendBand = {
+  trendLine: [Point, Point]
+  band: [Point, Point, Point, Point]
+}
+
+/**
+ * The weight chart's two overlays: the actual regression fit, and an
+ * "on-track" band (expected +/- concerning lb/week) anchored at the trend
+ * line's own starting value. Returns null when there's no regression (too
+ * few points -- mirrors weight_trend's own HAVING count(*) >= 3) rather
+ * than fabricating a line through noise.
+ */
+export function computeTrendBand(
+  points: Point[],
+  regression: Regression | null,
+  target: Targets,
+): TrendBand | null {
+  if (regression === null || points.length === 0) return null
+
+  const first = points[0]!.observedOn
+  const last = points[points.length - 1]!.observedOn
+
+  const valueAt = (observedOn: string): number => {
+    const offsetFromReference = daysBetween(regression.referenceDate, observedOn)
+    return regression.intercept + regression.slope * offsetFromReference
+  }
+
+  const trendLine: [Point, Point] = [
+    { observedOn: first, value: valueAt(first) },
+    { observedOn: last, value: valueAt(last) },
+  ]
+
+  const startValue = trendLine[0].value
+  const bandValueAt = (observedOn: string, lbPerWeek: number): number => {
+    const offsetFromFirst = daysBetween(first, observedOn)
+    return startValue + (lbPerWeek / 7) * offsetFromFirst
+  }
+
+  const band: [Point, Point, Point, Point] = [
+    { observedOn: first, value: bandValueAt(first, target.expected - target.concerning) },
+    { observedOn: last, value: bandValueAt(last, target.expected - target.concerning) },
+    { observedOn: last, value: bandValueAt(last, target.expected + target.concerning) },
+    { observedOn: first, value: bandValueAt(first, target.expected + target.concerning) },
+  ]
+
+  return { trendLine, band }
 }
