@@ -209,7 +209,9 @@ export async function loadWeightTrendLine(
      FROM observations_daily o
      WHERE o.metric = 'weight_lbs'
        AND o.observed_on > today_local() - $1::int
-       AND o.observed_on <= today_local()
+       -- Strictly less than today: today is a Partial Day everywhere else in
+       -- this app, and observations_daily is specifically unreliable for it.
+       AND o.observed_on < today_local()
        AND NOT EXISTS (
          SELECT 1 FROM weight_outliers x WHERE x.observed_on = o.observed_on
        )`,
