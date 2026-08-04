@@ -77,6 +77,11 @@ export function Chart({
   const H = height
   const PAD = 6
   const AXIS_PAD = 16
+  // Axis text renders inside a 600-unit-wide viewBox that's scaled to ~55%
+  // of its user-unit size on a phone (600 user units -> ~330 CSS px inside
+  // main's padding + the chart panel's padding) -- fontSize="8" here would
+  // render at under 5 CSS px, illegible in the garage. 16 lands around 9px.
+  const AXIS_FONT = 16
   // The x-scale always spans the full requested window ending today, not
   // just "first data point to last data point" -- so a gap at the start or
   // end of the window (e.g. nothing logged in the most recent 3 days)
@@ -87,9 +92,24 @@ export function Chart({
   const values = points.map((p) => p.value)
   let lo = Math.min(...values, ...ticks.y)
   let hi = Math.max(...values, ...ticks.y)
+  // The trend band and target line can both extrapolate well outside the
+  // observed values (the band is a regression projected across the whole
+  // window) -- fold them into the range too, or they render clipped off
+  // the plot and the on-track band silently swallows the entire chart.
+  if (trendBand) {
+    const bandValues = [
+      ...trendBand.band.map((p) => p.value),
+      ...trendBand.trendLine.map((p) => p.value),
+    ]
+    lo = Math.min(lo, ...bandValues)
+    hi = Math.max(hi, ...bandValues)
+  }
+  if (targetLine !== undefined) {
+    lo = Math.min(lo, targetLine)
+    hi = Math.max(hi, targetLine)
+  }
   if (markType === 'bar') {
     lo = Math.min(lo, 0) // bars grow from zero, never a truncated baseline
-    if (targetLine !== undefined) hi = Math.max(hi, targetLine)
   }
   const range = hi - lo || 1
 
@@ -127,14 +147,22 @@ export function Chart({
         </span>
       </figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${covered} readings`}>
-        {ticks.y.map((v) => (
-          <g key={v}>
-            <line x1={PAD} y1={y(v)} x2={W - PAD} y2={y(v)} stroke="var(--line)" strokeWidth="1" />
-            <text x={PAD} y={y(v) - 2} fontSize="8" fill="var(--muted)">{v}</text>
-          </g>
-        ))}
+        {ticks.y.map((v) => {
+          const yPos = y(v)
+          // The topmost gridline sits at y === PAD (hi is always bound by
+          // the top tick), so a label placed above it clips off the top of
+          // the viewBox -- drop it below the line instead whenever there
+          // isn't room above.
+          const nearTop = yPos < PAD + AXIS_FONT
+          return (
+            <g key={v}>
+              <line x1={PAD} y1={yPos} x2={W - PAD} y2={yPos} stroke="var(--line)" strokeWidth="1" />
+              <text x={PAD} y={nearTop ? yPos + AXIS_FONT : yPos - 2} fontSize={AXIS_FONT} fill="var(--muted)">{v}</text>
+            </g>
+          )
+        })}
         {ticks.x.map((d) => (
-          <text key={d} x={x(d)} y={H - 2} fontSize="8" fill="var(--muted)" textAnchor="middle">
+          <text key={d} x={x(d)} y={H - 2} fontSize={AXIS_FONT} fill="var(--muted)" textAnchor="middle">
             {d.slice(5)}
           </text>
         ))}
@@ -143,7 +171,7 @@ export function Chart({
           x1={x(today)} y1={PAD} x2={x(today)} y2={H - AXIS_PAD}
           stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="4,3"
         />
-        <text x={x(today)} y={PAD + 8} fontSize="8" fill="var(--muted)" textAnchor="middle">
+        <text x={x(today) - 4} y={PAD + AXIS_FONT} fontSize={AXIS_FONT} fill="var(--muted)" textAnchor="end">
           today (partial)
         </text>
 
