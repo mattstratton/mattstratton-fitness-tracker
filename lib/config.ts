@@ -8,12 +8,12 @@
  * about "losing too fast" while you are deliberately gaining — looks authoritative
  * and is simply wrong.
  *
- * Phase lives here rather than in the database on purpose: it changes maybe
- * twice a year, and having it in version control means the writeup can say
- * exactly what the targets were on a given date. If it ever starts changing
- * often, or historical windows need to know which phase a past day belonged to,
- * this becomes a `training_phases` table with effective dates and the signals
- * keep taking it as a parameter either way.
+ * The *current* targets now live in the `nutrition_targets` table (see
+ * db/migrations/0009_nutrition_targets.sql and lib/queries.ts's loadTargets),
+ * editable from /settings, because they turned out to change roughly weekly as
+ * MacroFactor re-tunes them — not the twice-a-year cadence this file originally
+ * assumed. `MAINTAIN` and `BULK` stay here as presets: known-good starting
+ * points for the settings form when switching phase, not live values.
  */
 export type Phase = 'cut' | 'maintain' | 'bulk'
 
@@ -33,15 +33,6 @@ export type Targets = {
    */
   expected: number
   concerning: number
-}
-
-/** Current, per nutrition-strategy.md. GLP-1 assisted cut. */
-export const TARGETS: Targets = {
-  phase: 'cut',
-  proteinG: 198,
-  calories: 1660,
-  expected: -1.0,
-  concerning: 1.5,
 }
 
 export const MAINTAIN: Targets = {

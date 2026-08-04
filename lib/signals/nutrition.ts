@@ -1,4 +1,3 @@
-import { TARGETS } from '../config.js'
 import type { Targets } from '../config.js'
 import type { NutritionDay, Signal } from './types.js'
 
@@ -13,7 +12,7 @@ import type { NutritionDay, Signal } from './types.js'
  * Callers must exclude today: it is a Partial Day and its intake is whatever has
  * been logged so far.
  */
-export function proteinAdherence(days: NutritionDay[], targets: Targets = TARGETS): Signal {
+export function proteinAdherence(days: NutritionDay[], targets: Targets): Signal {
   const target = targets.proteinG
   const base = { id: 'protein', title: 'Protein' } as const
   const logged = days.filter((d) => d.proteinG !== null) as Array<NutritionDay & { proteinG: number }>
@@ -41,6 +40,65 @@ export function proteinAdherence(days: NutritionDay[], targets: Targets = TARGET
     ...base,
     status,
     headline: `${hits}/${logged.length} days hit ${target}g — average ${avg}g`,
+    detail:
+      logged.length < days.length
+        ? `${days.length - logged.length} of the last ${days.length} days weren't logged, so this covers ${logged.length}.`
+        : undefined,
+  }
+}
+
+/** Maintenance has no hard number to hit, so "on target" is a band around it. */
+const MAINTENANCE_TOLERANCE_PCT = 0.05
+
+/**
+ * Calorie adherence over a window of COMPLETE days.
+ *
+ * Same hit-rate shape as proteinAdherence, but which direction counts as a
+ * "hit" depends on the phase, the same trick weightTrend uses: a cut wants
+ * at-or-under (over target is the miss), a bulk wants at-or-over (under is
+ * the miss), maintenance wants within a tolerance band either way.
+ *
+ * Returns unknown when the phase isn't being steered by calories at all
+ * (`targets.calories === null`, same meaning as a null calorie target
+ * everywhere else) rather than inventing a verdict against nothing.
+ */
+export function calorieAdherence(days: NutritionDay[], targets: Targets): Signal {
+  const base = { id: 'calories', title: 'Calories' } as const
+  const target = targets.calories
+
+  if (target === null) {
+    return {
+      ...base,
+      status: 'unknown',
+      headline: `Not being steered by calories on a ${targets.phase}`,
+    }
+  }
+
+  const logged = days.filter((d) => d.calories !== null) as Array<NutritionDay & { calories: number }>
+  if (logged.length === 0) {
+    return {
+      ...base,
+      status: 'unknown',
+      headline: `No calories logged in the last ${days.length} days`,
+      detail: 'Nothing to judge — this is a logging gap, not a miss.',
+    }
+  }
+
+  const isHit = (calories: number): boolean => {
+    if (targets.expected < 0) return calories <= target
+    if (targets.expected > 0) return calories >= target
+    return Math.abs(calories - target) <= target * MAINTENANCE_TOLERANCE_PCT
+  }
+
+  const hits = logged.filter((d) => isHit(d.calories)).length
+  const avg = Math.round(logged.reduce((a, d) => a + d.calories, 0) / logged.length)
+  const hitRate = hits / logged.length
+  const status = hitRate >= 0.8 ? 'ok' : hitRate >= 0.5 ? 'watch' : 'act'
+
+  return {
+    ...base,
+    status,
+    headline: `${hits}/${logged.length} days within target — average ${avg} vs ${target} kcal`,
     detail:
       logged.length < days.length
         ? `${days.length - logged.length} of the last ${days.length} days weren't logged, so this covers ${logged.length}.`

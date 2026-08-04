@@ -539,6 +539,60 @@ left no trace, and produced a wrong number with no way to tell.
   phase-aware: the same −1.2 lb/week is `ok` on a cut and "going the wrong way"
   on a bulk.
 
+## Targets moved from a hardcoded constant to a table, on schedule
+
+`lib/config.ts`'s own comment predicted this: "if it ever starts changing
+often... this becomes a table with effective dates." MacroFactor re-tunes
+calories/protein roughly weekly as weight and body-fat% shift — issue #9 — so
+that prediction just landed. `nutrition_targets` (migration 0009) is
+append-only, same reasoning as `observations`: an edit is a new effective-dated
+row, never an UPDATE, so a past day's grading is never rewritten by a later
+change and `/settings` can show real history instead of just a current value.
+
+While in there: `deficitReality` never actually graded against
+`targets.calories` — the calorie number was display-only, only protein had a
+real adherence signal. Added `calorieAdherence`, reusing `weightTrend`'s trick
+of deriving direction from the sign of `targets.expected` rather than
+switching on phase directly (cut wants at-or-under, bulk wants at-or-over,
+maintenance wants a tolerance band).
+
+**A real platform surprise while wiring the settings page's Server Action:**
+`import { redirect } from 'next/navigation'` failed to resolve — not just in
+this project's own `tsc --noEmit`, but inside `next build` itself, using this
+project's own `tsconfig.json`. Cause: Next 16.2.12's `package.json` has no
+`exports` map at all, and this project's `tsconfig.json` sets
+`moduleResolution: nodenext` (chosen so `lib`/`scripts` files, run directly by
+`tsx` as real ESM, get accurate extension-aware resolution). Under nodenext's
+strict ESM resolution, a bare subpath import like `next/navigation` requires an
+`exports` entry to resolve — Next ships the real files but doesn't declare
+them, relying on legacy CJS-style extensionless lookup that ESM resolution
+doesn't do. Tried the obvious fix (switch to `moduleResolution: bundler`, what
+`create-next-app` ships by default) — that resolved `next/navigation` but broke
+Turbopack's own bundling of the existing `./ui.js`-style relative imports
+project-wide, a worse regression. Reverted. The actual fix: don't import
+`next/navigation` at all — a Server Action bound directly to a `<form
+action={...}>` triggers Next's automatic route refresh once it resolves, no
+`redirect()`/`revalidatePath()` needed, and this page is `force-dynamic` anyway
+so there's no route cache to invalidate. Filed away rather than chased further:
+if a future feature genuinely needs `redirect`, `cookies`, or `headers`, this
+tsconfig incompatibility will resurface and need a real fix, not a workaround.
+
+**Couldn't verify the finished settings page in a real logged-in browser
+session.** The Google OAuth client is only registered for the production
+redirect URI (`fitness.mattstratton.com/api/auth/callback/google`), so signing
+in against `localhost:3000` fails with `redirect_uri_mismatch` — a pre-existing
+limitation of local dev, not something introduced by this change. Verified
+instead via: `npm run migrate` applying cleanly against the real Tiger Cloud dev
+database and seeding the expected row, `npm run q` confirming the row's
+contents, `npm test` (84/84, including new `calorieAdherence` fixtures) and
+`next build` succeeding with `/settings` compiled in. What's *not* verified:
+the form actually rendering and submitting correctly in a browser. Briefly
+considered widening `proxy.ts`'s matcher to exclude `/settings` so the page
+could be loaded unauthenticated for a local screenshot — stopped short of that;
+temporarily punching a hole in the auth boundary to test through it is exactly
+the kind of shortcut this project's own traps section warns against, even
+reverted immediately after.
+
 ## Verifying that a tool exists is not verifying that it works
 
 Phase 0 of the web app was explicitly about resolving unknowns before building on

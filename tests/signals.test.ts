@@ -1,16 +1,28 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { proteinAdherence, loggingGaps } from '../lib/signals/nutrition.js'
+import { calorieAdherence, proteinAdherence, loggingGaps } from '../lib/signals/nutrition.js'
 import { weightTrend, deficitReality } from '../lib/signals/body.js'
 import { overreaching } from '../lib/signals/recovery.js'
 import { stalling, recentMisses, toSessions } from '../lib/signals/lifting.js'
 import { freshness } from '../lib/signals/freshness.js'
 import { parseTiers } from '../lib/signals/tiers.js'
-import { TARGETS, MAINTAIN, BULK } from '../lib/config.js'
+import { MAINTAIN, BULK } from '../lib/config.js'
+import type { Targets } from '../lib/config.js'
 import type { LiftingSetRow, NutritionDay, RecoveryDay } from '../lib/signals/types.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
+
+// The settled cut targets from nutrition-strategy.md, as of the migration to
+// nutrition_targets (db/migrations/0009). A local fixture, not a production
+// constant, on purpose -- these are values a test needs, not a live default.
+const CUT: Targets = { phase: 'cut', proteinG: 198, calories: 1660, expected: -1.0, concerning: 1.5 }
+
+// MAINTAIN/BULK ship with calories: null ("not being steered"). These variants
+// exist purely so calorieAdherence's direction logic can be exercised for
+// phases that DO have a number to grade against.
+const BULK_WITH_CALORIES: Targets = { ...BULK, calories: 3200 }
+const MAINTAIN_WITH_CALORIES: Targets = { ...MAINTAIN, calories: 2200 }
 
 // ---- protein ---------------------------------------------------------------
 
@@ -19,7 +31,7 @@ function nutrition(protein: Array<number | null>): NutritionDay[] {
 }
 
 test('protein: hitting the target most days is ok', () => {
-  const s = proteinAdherence(nutrition([200, 210, 199, 205, 198, 150, 220]))
+  const s = proteinAdherence(nutrition([200, 210, 199, 205, 198, 150, 220]), CUT)
   assert.equal(s.status, 'ok')
   assert.match(s.headline, /6\/7 days hit 198g/)
 })
@@ -27,20 +39,20 @@ test('protein: hitting the target most days is ok', () => {
 test('protein: the average can look fine while the shape is bad', () => {
   // Average is 198 -- exactly on target -- but four of seven days missed. The
   // average alone would say "fine"; the hit-rate says otherwise.
-  const s = proteinAdherence(nutrition([260, 260, 260, 150, 150, 150, 156]))
+  const s = proteinAdherence(nutrition([260, 260, 260, 150, 150, 150, 156]), CUT)
   const avg = Math.round((260 * 3 + 150 * 3 + 156) / 7)
   assert.equal(avg, 198)
   assert.equal(s.status, 'act', 'a 3/7 hit rate must be actionable even at target average')
 })
 
 test('protein: unlogged days are excluded, not counted as zero', () => {
-  const s = proteinAdherence(nutrition([200, null, null, 210, null, null, 205]))
+  const s = proteinAdherence(nutrition([200, null, null, 210, null, null, 205]), CUT)
   assert.equal(s.status, 'ok', '3/3 logged days hit the target')
   assert.match(s.detail ?? '', /4 of the last 7 days weren't logged/)
 })
 
 test('protein: nothing logged is unknown, never a shortfall', () => {
-  const s = proteinAdherence(nutrition([null, null, null]))
+  const s = proteinAdherence(nutrition([null, null, null]), CUT)
   assert.equal(s.status, 'unknown')
   assert.match(s.detail ?? '', /logging gap, not a shortfall/)
 })
@@ -52,32 +64,77 @@ test('logging: separates "did not log" from "did not eat enough"', () => {
   assert.match(s.headline, /4 of 5 days unlogged/)
 })
 
+// ---- calories ---------------------------------------------------------------
+
+function calories(values: Array<number | null>): NutritionDay[] {
+  return values.map((c, i) => ({ observedOn: day(i + 1), calories: c, proteinG: c === null ? null : 150 }))
+}
+
+test('calories: on a cut, staying at or under target most days is ok', () => {
+  const s = calorieAdherence(calories([1600, 1650, 1660, 1500, 1700, 1620, 1400]), CUT)
+  assert.equal(s.status, 'ok')
+  assert.match(s.headline, /6\/7 days within target/)
+})
+
+test('calories: on a cut, going over target is the miss', () => {
+  const s = calorieAdherence(calories([1900, 2000, 1950, 2100]), CUT)
+  assert.equal(s.status, 'act')
+})
+
+test('calories: on a bulk, going under target is the miss', () => {
+  const s = calorieAdherence(calories([2600, 2700, 2800, 2900]), BULK_WITH_CALORIES)
+  assert.equal(s.status, 'act')
+})
+
+test('calories: on a bulk, staying at or over target is ok', () => {
+  const s = calorieAdherence(calories([3200, 3300, 3400, 3250]), BULK_WITH_CALORIES)
+  assert.equal(s.status, 'ok')
+})
+
+test('calories: on maintenance, only meaningful drift either way misses', () => {
+  // Target 2200, 5% tolerance is +/-110.
+  const s = calorieAdherence(calories([2200, 2600, 2900, 1800]), MAINTAIN_WITH_CALORIES)
+  assert.equal(s.status, 'act', '1/4 within the band')
+})
+
+test('calories: a phase not being steered by calories is unknown, not graded', () => {
+  const s = calorieAdherence(calories([1600, 1700]), MAINTAIN)
+  assert.equal(s.status, 'unknown')
+  assert.match(s.headline, /not being steered/i)
+})
+
+test('calories: nothing logged is unknown, never a miss', () => {
+  const s = calorieAdherence(calories([null, null, null]), CUT)
+  assert.equal(s.status, 'unknown')
+  assert.match(s.detail ?? '', /logging gap, not a miss/)
+})
+
 // ---- weight & deficit ------------------------------------------------------
 
 test('weight: flags short and long windows disagreeing in sign', () => {
   const s = weightTrend([
     { days: 14, weighIns: 8, lbsPerWeek: 0.4 },
     { days: 90, weighIns: 40, lbsPerWeek: -0.6 },
-  ])
+  ], CUT)
   assert.equal(s.status, 'watch')
   assert.match(s.detail ?? '', /90-day trend goes the other way/)
 })
 
 test('weight: losing faster than 1.5 lb/week is worth watching', () => {
-  const s = weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: -2.1 }])
+  const s = weightTrend([{ days: 14, weighIns: 9, lbsPerWeek: -2.1 }], CUT)
   assert.equal(s.status, 'watch')
   assert.match(s.detail ?? '', /lean mass/)
 })
 
 test('weight: too few weigh-ins is unknown, not ok', () => {
-  assert.equal(weightTrend([{ days: 14, weighIns: 1, lbsPerWeek: null }]).status, 'unknown')
+  assert.equal(weightTrend([{ days: 14, weighIns: 1, lbsPerWeek: null }], CUT).status, 'unknown')
 })
 
 test('deficit: ignores a well-formed but poorly covered window', () => {
   // The real 90-day row: confident numbers over 21% coverage. Must be refused.
   const s = deficitReality([
     { windowDays: 90, coveragePct: 21, avgNetKcal: -1568, impliedLbsPerWeek: -3.14, actualLbsPerWeek: -0.64, overstatementFactor: 4.9 },
-  ])
+  ], CUT)
   assert.equal(s.status, 'unknown')
   assert.match(s.detail ?? '', /60% is the bar/)
 })
@@ -85,7 +142,7 @@ test('deficit: ignores a well-formed but poorly covered window', () => {
 test('deficit: leads with the scale and names the overstatement', () => {
   const s = deficitReality([
     { windowDays: 14, coveragePct: 93, avgNetKcal: -1784, impliedLbsPerWeek: -3.57, actualLbsPerWeek: -1.35, overstatementFactor: 2.64 },
-  ])
+  ], CUT)
   assert.equal(s.status, 'ok')
   assert.match(s.headline, /675 kcal\/day, from the scale/)
   assert.match(s.detail ?? '', /2\.6x the scale/)
@@ -316,7 +373,7 @@ test('phase: the same weight trend reads differently on a cut and a bulk', () =>
   // hazard this replaces was a hardcoded cutting assumption still grading a
   // bulk months later, looking authoritative and being wrong.
   const rows = [{ days: 14, weighIns: 9, lbsPerWeek: -1.2 }]
-  assert.equal(weightTrend(rows, TARGETS).status, 'ok')
+  assert.equal(weightTrend(rows, CUT).status, 'ok')
 
   const bulk = weightTrend(rows, BULK)
   assert.equal(bulk.status, 'watch')
@@ -337,12 +394,12 @@ test('phase: gaining fast on a bulk is flagged, but not as "wrong way"', () => {
 
 test('phase: protein grades against the phase target, not a constant', () => {
   const days = nutrition([175, 175, 175, 175])
-  assert.equal(proteinAdherence(days, TARGETS).status, 'act', '175g misses a 198g cut target')
+  assert.equal(proteinAdherence(days, CUT).status, 'act', '175g misses a 198g cut target')
   assert.equal(proteinAdherence(days, MAINTAIN).status, 'ok', '175g clears a 170g maintenance target')
 })
 
 test('phase: a bulk calls it a surplus rather than a deficit', () => {
   const rows = [{ windowDays: 14, coveragePct: 90, avgNetKcal: 400, impliedLbsPerWeek: 0.8, actualLbsPerWeek: 0.5, overstatementFactor: 1.6 }]
   assert.equal(deficitReality(rows, BULK).title, 'Surplus')
-  assert.equal(deficitReality(rows, TARGETS).title, 'Deficit')
+  assert.equal(deficitReality(rows, CUT).title, 'Deficit')
 })

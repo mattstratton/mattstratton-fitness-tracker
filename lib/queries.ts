@@ -1,13 +1,14 @@
 // The fetch layer. Loads what the pure signal functions need and nothing more.
 //
 // Kept separate so lib/signals/* stays free of SQL and testable against
-// fixtures. Everything here is read-only.
+// fixtures. Almost everything here is read-only; saveTargets is the one
+// exception, for the /settings page.
 import { getPool } from './db.js'
-import { TARGETS } from './config.js'
+import type { Phase, Targets } from './config.js'
 import { deficitReality, weightTrend } from './signals/body.js'
 import { freshness } from './signals/freshness.js'
 import { recentMisses, stalling } from './signals/lifting.js'
-import { loggingGaps, proteinAdherence } from './signals/nutrition.js'
+import { calorieAdherence, loggingGaps, proteinAdherence } from './signals/nutrition.js'
 import { overreaching } from './signals/recovery.js'
 import { parseTiers } from './signals/tiers.js'
 import type { Signal } from './signals/types.js'
@@ -49,10 +50,67 @@ async function liftosaurTiers(): Promise<Map<string, 't1' | 't2' | 't3'> | undef
   }
 }
 
+export type TargetRow = Targets & { id: number; effectiveOn: string; note: string | null }
+
+/** Current nutrition targets: the latest row whose effective_on has arrived. */
+export async function loadTargets(): Promise<Targets> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT phase, protein_g, calories, expected, concerning FROM nutrition_targets
+     WHERE effective_on <= today_local() ORDER BY effective_on DESC, created_at DESC LIMIT 1`,
+  )
+  const t = r[0]!
+  return {
+    phase: t['phase'] as Phase,
+    proteinG: Number(t['protein_g']),
+    calories: num(t['calories']),
+    expected: Number(t['expected']),
+    concerning: Number(t['concerning']),
+  }
+}
+
+/** Recent target changes, most recent first -- for the /settings history list. */
+export async function loadTargetHistory(limit = 10): Promise<TargetRow[]> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT id, phase, protein_g, calories, expected, concerning, effective_on, note
+     FROM nutrition_targets ORDER BY effective_on DESC, created_at DESC LIMIT $1`,
+    [limit],
+  )
+  return r.map((t) => ({
+    id: Number(t['id']),
+    phase: t['phase'] as Phase,
+    proteinG: Number(t['protein_g']),
+    calories: num(t['calories']),
+    expected: Number(t['expected']),
+    concerning: Number(t['concerning']),
+    effectiveOn: day(t['effective_on']),
+    note: t['note'] as string | null,
+  }))
+}
+
+/**
+ * Append a new nutrition targets row -- never an update, same reasoning as
+ * observations (docs/adr/0001). `effective_on` defaults to today_local() in
+ * the schema, so this always takes effect immediately.
+ */
+export async function saveTargets(input: {
+  phase: Phase
+  proteinG: number
+  calories: number | null
+  expected: number
+  concerning: number
+  note?: string | null
+}): Promise<void> {
+  await getPool().query(
+    `INSERT INTO nutrition_targets (phase, protein_g, calories, expected, concerning, note)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [input.phase, input.proteinG, input.calories, input.expected, input.concerning, input.note ?? null],
+  )
+}
+
 export async function loadSignals(): Promise<Signal[]> {
   // Nutrition excludes today: it is a Partial Day and its intake is whatever has
   // been logged so far.
-  const [nut, rec, wt, er, fr, sets, tiers] = await Promise.all([
+  const [nut, rec, wt, er, fr, sets, tiers, targets] = await Promise.all([
     rows<Record<string, unknown>>(
       `SELECT observed_on, calories, protein_g FROM nutrition
        WHERE observed_on BETWEEN today_local() - 7 AND today_local() - 1 ORDER BY 1`,
@@ -69,6 +127,7 @@ export async function loadSignals(): Promise<Signal[]> {
        FROM lifting_sets WHERE performed_on > today_local() - 60 ORDER BY performed_on`,
     ),
     liftosaurTiers(),
+    loadTargets(),
   ])
 
   const nutrition = nut.map((r) => ({
@@ -100,9 +159,10 @@ export async function loadSignals(): Promise<Signal[]> {
   // Freshness first: everything below it is coached on whatever it reports.
   return [
     freshness(fresh),
-    proteinAdherence(nutrition, TARGETS),
-    weightTrend(trend, TARGETS),
-    deficitReality(energy, TARGETS),
+    proteinAdherence(nutrition, targets),
+    calorieAdherence(nutrition, targets),
+    weightTrend(trend, targets),
+    deficitReality(energy, targets),
     stalling(lifting, tiers),
     overreaching(recovery),
     recentMisses(lifting),

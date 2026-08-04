@@ -1,4 +1,3 @@
-import { TARGETS } from '../config.js'
 import type { Targets } from '../config.js'
 import type { EnergyRealityRow, Signal, WeightTrendRow } from './types.js'
 
@@ -12,7 +11,7 @@ const MIN_COVERAGE_PCT = 60
  * case: it's either the start of a real change or a fortnight of water, and
  * which one it is only becomes clear later. Worth surfacing, not worth acting on.
  */
-export function weightTrend(rows: WeightTrendRow[], targets: Targets = TARGETS): Signal {
+export function weightTrend(rows: WeightTrendRow[], targets: Targets): Signal {
   const base = { id: 'weight', title: 'Weight' } as const
   const by = (d: number) => rows.find((r) => r.days === d)
   const short = by(14)
@@ -62,7 +61,7 @@ export function weightTrend(rows: WeightTrendRow[], targets: Targets = TARGETS):
  * real numbers whose *difference* is not a measurement. This signal exists so
  * that gap is visible rather than quietly believed.
  */
-export function deficitReality(rows: EnergyRealityRow[], targets: Targets = TARGETS): Signal {
+export function deficitReality(rows: EnergyRealityRow[], targets: Targets): Signal {
   // On a bulk this is a surplus, not a deficit; the arithmetic is identical and
   // only the word changes.
   const word = targets.expected > 0 ? 'Surplus' : 'Deficit'

@@ -89,6 +89,7 @@ push (personal Vercel scope `mattystratton` — never TigerData's).
 | `app/page.tsx` | glance: today's tiles, then signals needing attention |
 | `app/coach/page.tsx` | every signal with its reasoning |
 | `app/trends/page.tsx` | charts, 30/90/365d |
+| `app/settings/page.tsx` | edit nutrition targets (`nutrition_targets` table) and see the change history |
 | `app/api/hae/route.ts` | HAE's push endpoint (bearer token) |
 | `app/api/cron/*` | daily Liftosaur sync and freshness check |
 | `lib/signals/` | the coaching rules — **pure functions, fixture-tested** |
