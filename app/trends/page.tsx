@@ -36,7 +36,14 @@ const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: 
   // Same sparsity/noise profile as weight (bioimpedance wobbles with hydration
   // and glycogen day to day) -- same maxGapDays, same scatter treatment below.
   bodyFat: { title: 'Body fat', unit: '%', maxGapDays: 5, height: 90 },
-  leanMass: { title: 'Lean mass', unit: 'lb', maxGapDays: 5, height: 90 },
+  // Shown as % of body weight, not absolute lb: lean_mass_lbs isn't measured
+  // independently, it's derived as weight * (1 - body_fat_pct/100) (confirmed
+  // against live data -- matches to within rounding), so an absolute-lb
+  // reading declines through any real weight loss even when composition is
+  // fine. % answers the question that's actually being asked ("is composition
+  // holding up"), not the confounded one ("is this raw number shrinking,
+  // which it will").
+  leanMass: { title: 'Lean mass', unit: '%', maxGapDays: 5, height: 90 },
   protein: { title: 'Protein', unit: 'g', height: 140 },
   calories: { title: 'Calories', height: 90 },
   // Ingested from MacroFactor and already flow into the `nutrition` view's
@@ -110,12 +117,14 @@ export default async function Trends({
   }
 
   const [
-    weight, bodyFat, leanMass, protein, calories, carbs, fat, fiber, steps, rhr, hrv, sleep, vo2Max,
+    weight, bodyFat, leanMassInverse, protein, calories, carbs, fat, fiber, steps, rhr, hrv, sleep, vo2Max,
     targets, today, weightTrendLine,
   ] = await Promise.all([
     loadSeries('weight_lbs', days.weight),
     loadSeries('body_fat_pct', days.bodyFat),
-    loadSeries('lean_mass_lbs', days.leanMass),
+    // Its own independent window/range control, so fetched separately from
+    // bodyFat above even though it's the same underlying metric.
+    loadSeries('body_fat_pct', days.leanMass),
     loadSeries('protein_g', days.protein),
     loadSeries('calories', days.calories),
     loadSeries('carbs_g', days.carbs),
@@ -134,6 +143,8 @@ export default async function Trends({
   // Minutes -> hours for readability, same pattern as protein/calories'
   // status maps below transforming a raw series before display.
   const sleepHours: Point[] = sleep.map((p) => ({ observedOn: p.observedOn, value: p.value / 60 }))
+  // Lean mass % is just 100 - body fat % (see CHART_CONFIG.leanMass comment).
+  const leanMass: Point[] = leanMassInverse.map((p) => ({ observedOn: p.observedOn, value: 100 - p.value }))
 
   const points: Record<Metric, Point[]> = {
     weight, bodyFat, leanMass, protein, calories, carbs, fat, fiber, steps, rhr, hrv, sleep: sleepHours, vo2Max,
