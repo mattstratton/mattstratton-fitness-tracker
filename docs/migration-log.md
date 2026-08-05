@@ -935,3 +935,53 @@ The original plan's Global Constraints listed "every tap/hit target is ≥24px e
 The plot area is the ~330 CSS px viewBox width already measured above (the 0.55 scale factor), minus the left gutter and padding — call it roughly 300 CSS px of usable width. A 365-day window at 90-95% coverage packs somewhere around 330-350 points into that space: **roughly 1 CSS px between neighboring points**, two orders of magnitude under 24px. Since each point's band runs from the midpoint to its left neighbor to the midpoint to its right neighbor, no per-point hit region — band or fixed-size circle, it doesn't matter which — can be wider than that spacing. The constraint was never satisfiable for a chart like this; only a window sparse enough (a handful of points across the same width) would ever clear 24px per band.
 
 Raised with Matty rather than silently reworded: the decision was to keep the band-based interaction exactly as implemented (it resolves every tap to its nearest point, which is the property that actually matters for usability) and fix the plan's wording instead of the code — amended in `docs/superpowers/plans/2026-08-04-trends-charts-readability.md`'s Global Constraints to state the real guarantee (nearest-point resolution) rather than a fixed minimum size that data density makes impossible. Worth filing next to finding 4's "anything sized in user units needs the 0.55 factor applied before you believe it" — this is the same lesson one level up: a plan constraint written before real data density was known can be exactly as wrong as code written the same way, and the fix is to correct the plan, not to quietly ship something that doesn't meet it.
+
+## Cross-domain correlation investigation (#15) — the actionable events mostly don't exist yet
+
+A repo review turned up that every signal in `lib/signals/` reads exactly one domain's
+rows — nothing ever joins nutrition, recovery, lifting, sleep, or steps to compute a
+verdict, despite advisory copy inside a few signals ("back off volume or eat more,"
+"expected on a deficit") gesturing at relationships the code never actually checks.
+Before writing any cross-domain signal, checked whether the three most obvious
+hypotheses actually hold against real history. They don't get a real test, and the
+reason why is itself the finding.
+
+**Lifting stalls, tier-filtered, have never happened.** Reconstructed `stalling()`'s
+exact "same weight missed 2+ consecutive targeted sessions" logic in SQL against the
+full Liftosaur/GZCLP history (2024-02-19 → present, 185 sessions). Excluding T3
+accessories: **zero** T1/T2 stalls, ever. Without the exclusion, all 6 raw hits are
+Triceps Pushdown — precisely the false positive the tier filter exists to catch
+(confirmed separately by `tests/signals.test.ts`'s own "a T3 sitting at one weight is
+the program working, not a stall" case). There is no stall event in this program's
+entire life to correlate anything against.
+
+**`overreaching()`'s `act` status has never fired, in 9+ years of RHR/HRV data.**
+Rather than hand-approximating the baseline/SD-threshold math in SQL — which risks
+getting subtly wrong the exact class of mistake this log keeps finding — ran the real
+function from `lib/signals/recovery.ts` against every day in the full recovery
+history via a one-off script (`getPool()` + `overreaching()` imported directly,
+same 63-day rolling window `loadSignals()` uses). 2,402 distinct days simulated:
+**`act` = 0, `watch` = 15**, and every `watch` predates 2024-06-27 — none at all in
+2025 or 2026. The 3 `watch` hits that overlap the Liftosaur era sit under a
+completely different training program (cycling + "5x5 A/B" splits, not GZCLP
+Blacknoir) with almost no nutrition data logged nearby (3 logged days across two
+multi-week windows) — not comparable to anything current.
+
+**Consistent nutrition logging is ~3-4 weeks old, nowhere near enough to test
+anything against lifting performance.** Weekly miss-rate vs. logging comparison over
+the last 180 days shows missed sets appearing *only* in the three weeks with full
+7-day logging (2026-07-13 onward) — but that's fully explained by "essentially
+nothing was logged before mid-July" (0-1 days/week), not a real relationship. Three
+overlapping weeks is an anecdote, not a sample.
+
+**Sleep remains too sparse** (~10% of the last 180 days) for any correlation check.
+
+**Conclusion, and why it belongs in this log rather than just a closed issue:** the
+absence of a testable correlation is itself the useful result here, and the method
+matters as much as the number — this is the second time in this project (see the
+`overreaching`/`recentMisses` fixture history, and the `run_playground` incident) that
+running the *actual* code against real data caught something a plausible-sounding
+hand-derivation would have gotten wrong or missed the significance of. Filed back on
+#15 as a dated follow-up (~November 2026, once nutrition logging has 2-3 months of
+history) rather than closed outright — the hypotheses aren't rejected, they're just
+not answerable with the data on hand today.
