@@ -1,9 +1,14 @@
-import type { ActivityDay, Signal } from './types.js'
+import type { ActivityDay, ExerciseDay, Signal } from './types.js'
 
 const RECENT_DAYS = 7
 const MIN_RECENT_DAYS = 4
 const MIN_BASELINE_DAYS = 20
 const SD_THRESHOLD = 1.5
+
+const EXERCISE_WINDOW_DAYS = 7
+const MIN_EXERCISE_DAYS = 4
+const HIGH_ADHERENCE = 0.8
+const LOW_ADHERENCE = 0.5
 
 function meanSd(values: number[]): { mean: number; sd: number } {
   const mean = values.reduce((a, v) => a + v, 0) / values.length
@@ -69,4 +74,40 @@ export function activityTrend(days: ActivityDay[]): Signal {
   }
 
   return { ...base, status: 'ok', headline: `${Math.round(recentMean)} steps/day, near baseline` }
+}
+
+/**
+ * Exercise-minutes adherence against a real, user-set daily target (Apple's
+ * own Exercise ring) -- unlike steps, which has no established goal anywhere
+ * in this app, exercise minutes is graded like protein/calories: hit-rate
+ * against a number, not a personal-baseline comparison. Can genuinely reach
+ * `act`, unlike activityTrend, because there's a real goal to fall short of.
+ *
+ * `days` reflects only days with real automatic data -- a gap is an absent
+ * row, never a zero -- so this can be sparser than windowDays if the Watch
+ * wasn't worn, though exercise_minutes has near-100% historical coverage.
+ */
+export function exerciseAdherence(
+  days: ExerciseDay[], targetMinutes: number, windowDays = EXERCISE_WINDOW_DAYS,
+): Signal {
+  const base = { id: 'exercise', title: 'Exercise minutes' } as const
+
+  if (days.length < MIN_EXERCISE_DAYS) {
+    return { ...base, status: 'unknown', headline: `Not enough exercise data in the last ${windowDays} days` }
+  }
+
+  const hits = days.filter((d) => d.minutes >= targetMinutes).length
+  const avg = Math.round(days.reduce((a, d) => a + d.minutes, 0) / days.length)
+  const hitRate = hits / days.length
+  const status = hitRate >= HIGH_ADHERENCE ? 'ok' : hitRate >= LOW_ADHERENCE ? 'watch' : 'act'
+
+  return {
+    ...base,
+    status,
+    headline: `${hits}/${days.length} days hit ${targetMinutes} min — average ${avg} min`,
+    detail:
+      days.length < windowDays
+        ? `${windowDays - days.length} of the last ${windowDays} days had no exercise-minutes data.`
+        : undefined,
+  }
 }

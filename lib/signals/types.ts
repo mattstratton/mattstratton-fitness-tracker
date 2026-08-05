@@ -46,6 +46,9 @@ export type RecoveryDay = {
  *  single-metric series in this app (see lib/queries.ts's loadSeries). */
 export type ActivityDay = { observedOn: string; steps: number }
 
+/** Same gap convention as ActivityDay. */
+export type ExerciseDay = { observedOn: string; minutes: number }
+
 export type WeightTrendRow = { days: number; weighIns: number; lbsPerWeek: number | null }
 
 export type EnergyRealityRow = {

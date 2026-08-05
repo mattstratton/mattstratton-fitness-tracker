@@ -4,13 +4,15 @@ import assert from 'node:assert/strict'
 import { calorieAdherence, proteinAdherence, loggingGaps } from '../lib/signals/nutrition.js'
 import { weightTrend, deficitReality } from '../lib/signals/body.js'
 import { overreaching } from '../lib/signals/recovery.js'
-import { activityTrend } from '../lib/signals/activity.js'
+import { activityTrend, exerciseAdherence } from '../lib/signals/activity.js'
 import { stalling, recentMisses, toSessions } from '../lib/signals/lifting.js'
 import { freshness } from '../lib/signals/freshness.js'
 import { parseTiers } from '../lib/signals/tiers.js'
 import { MAINTAIN, BULK } from '../lib/config.js'
 import type { Targets } from '../lib/config.js'
-import type { ActivityDay, LiftingSetRow, NutritionDay, RecoveryDay } from '../lib/signals/types.js'
+import type {
+  ActivityDay, ExerciseDay, LiftingSetRow, NutritionDay, RecoveryDay,
+} from '../lib/signals/types.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
 
@@ -252,6 +254,41 @@ test('activity: the recent window cannot drag its own baseline', () => {
   const recent = [800, 750, 900, 820, 780, 860, 700]
   const s = activityTrend(activity([...baseline, ...recent]))
   assert.equal(s.status, 'watch')
+})
+
+// ---- exercise minutes -------------------------------------------------------
+
+function exercise(minutes: number[]): ExerciseDay[] {
+  return minutes.map((v, i) => ({ observedOn: day(i + 1), minutes: v }))
+}
+
+test('exercise: hitting the target most days is ok', () => {
+  const s = exerciseAdherence(exercise([50, 48, 45, 60, 45, 40, 55]), 45)
+  assert.equal(s.status, 'ok')
+  assert.match(s.headline, /hit 45 min/)
+})
+
+test('exercise: missing the target about half the time is watch', () => {
+  const s = exerciseAdherence(exercise([50, 30, 45, 20, 45, 25, 55]), 45)
+  assert.equal(s.status, 'watch')
+})
+
+test('exercise: mostly missing the target is act', () => {
+  // Unlike steps, this can genuinely reach act -- there's a real goal here.
+  const s = exerciseAdherence(exercise([10, 15, 5, 20, 0, 10, 15]), 45)
+  assert.equal(s.status, 'act')
+})
+
+test('exercise: too few recent days is unknown, not ok', () => {
+  const s = exerciseAdherence(exercise([50, 45]), 45)
+  assert.equal(s.status, 'unknown')
+  assert.match(s.headline, /Not enough exercise data/)
+})
+
+test('exercise: a gap in the window is noted, not treated as a miss', () => {
+  // 5 of a 7-day window -- gap is an absent row, not a zero.
+  const s = exerciseAdherence(exercise([50, 48, 45, 60, 45]), 45, 7)
+  assert.match(s.detail ?? '', /2 of the last 7 days had no exercise-minutes data/)
 })
 
 // ---- lifting ---------------------------------------------------------------

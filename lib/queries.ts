@@ -6,7 +6,7 @@
 import { getPool } from './db.js'
 import type { Phase, Targets } from './config.js'
 import { nextWorkoutDay, parseProgramDays } from './liftoscriptProgram.js'
-import { activityTrend } from './signals/activity.js'
+import { activityTrend, exerciseAdherence } from './signals/activity.js'
 import { deficitReality, weightTrend } from './signals/body.js'
 import { freshness } from './signals/freshness.js'
 import { recentMisses, stalling } from './signals/lifting.js'
@@ -167,10 +167,45 @@ export async function saveTargets(input: {
   )
 }
 
+export type ExerciseTargetRow = { id: number; minutesTarget: number; effectiveOn: string; note: string | null }
+
+/** Current exercise-minutes target: the latest row whose effective_on has arrived. */
+export async function loadExerciseTarget(): Promise<{ minutesTarget: number }> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT minutes_target FROM exercise_targets
+     WHERE effective_on <= today_local() ORDER BY effective_on DESC, created_at DESC LIMIT 1`,
+  )
+  return { minutesTarget: Number(r[0]!['minutes_target']) }
+}
+
+/** Recent target changes, most recent first -- for the /settings history list. */
+export async function loadExerciseTargetHistory(limit = 10): Promise<ExerciseTargetRow[]> {
+  const r = await rows<Record<string, unknown>>(
+    `SELECT id, minutes_target, effective_on, note
+     FROM exercise_targets ORDER BY effective_on DESC, created_at DESC LIMIT $1`,
+    [limit],
+  )
+  return r.map((t) => ({
+    id: Number(t['id']),
+    minutesTarget: Number(t['minutes_target']),
+    effectiveOn: day(t['effective_on']),
+    note: t['note'] as string | null,
+  }))
+}
+
+/** Append a new exercise target row -- never an update, same reasoning as
+ *  nutrition_targets/observations (docs/adr/0001). */
+export async function saveExerciseTarget(input: { minutesTarget: number; note?: string | null }): Promise<void> {
+  await getPool().query(
+    `INSERT INTO exercise_targets (minutes_target, note) VALUES ($1, $2)`,
+    [input.minutesTarget, input.note ?? null],
+  )
+}
+
 export async function loadSignals(): Promise<Signal[]> {
   // Nutrition excludes today: it is a Partial Day and its intake is whatever has
   // been logged so far.
-  const [nut, rec, wt, er, fr, sets, steps, tiers, targets] = await Promise.all([
+  const [nut, rec, wt, er, fr, sets, steps, exerciseMin, tiers, targets, exerciseTarget] = await Promise.all([
     rows<Record<string, unknown>>(
       `SELECT observed_on, calories, protein_g FROM nutrition
        WHERE observed_on BETWEEN today_local() - 7 AND today_local() - 1 ORDER BY 1`,
@@ -191,8 +226,14 @@ export async function loadSignals(): Promise<Signal[]> {
        WHERE metric = 'steps' AND observed_on > today_local() - 90 AND observed_on < today_local()
        ORDER BY observed_on`,
     ),
+    rows<Record<string, unknown>>(
+      `SELECT observed_on, value FROM observations_daily
+       WHERE metric = 'exercise_minutes' AND observed_on BETWEEN today_local() - 7 AND today_local() - 1
+       ORDER BY observed_on`,
+    ),
     liftosaurTiers(),
     loadTargets(),
+    loadExerciseTarget(),
   ])
 
   const nutrition = nut.map((r) => ({
@@ -221,6 +262,7 @@ export async function loadSignals(): Promise<Signal[]> {
     isAmrap: r['is_amrap'] === null ? null : Boolean(r['is_amrap']),
   }))
   const activity = steps.map((r) => ({ observedOn: day(r['observed_on']), steps: Number(r['value']) }))
+  const exerciseMinutes = exerciseMin.map((r) => ({ observedOn: day(r['observed_on']), minutes: Number(r['value']) }))
 
   // Freshness first: everything below it is coached on whatever it reports.
   return [
@@ -232,6 +274,7 @@ export async function loadSignals(): Promise<Signal[]> {
     stalling(lifting, tiers),
     overreaching(recovery),
     activityTrend(activity),
+    exerciseAdherence(exerciseMinutes, exerciseTarget.minutesTarget),
     recentMisses(lifting),
     loggingGaps(nutrition),
   ]

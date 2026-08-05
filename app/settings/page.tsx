@@ -1,6 +1,8 @@
 import { MAINTAIN, BULK } from '../../lib/config.js'
 import type { Phase } from '../../lib/config.js'
-import { loadTargetHistory, saveTargets } from '../../lib/queries.js'
+import {
+  loadExerciseTargetHistory, loadTargetHistory, saveExerciseTarget, saveTargets,
+} from '../../lib/queries.js'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,9 +24,20 @@ async function updateTargets(formData: FormData): Promise<void> {
   })
 }
 
+async function updateExerciseTarget(formData: FormData): Promise<void> {
+  'use server'
+  const note = String(formData.get('note') ?? '').trim()
+
+  await saveExerciseTarget({
+    minutesTarget: Number(formData.get('minutesTarget')),
+    note: note === '' ? null : note,
+  })
+}
+
 export default async function Settings() {
-  const history = await loadTargetHistory()
+  const [history, exerciseHistory] = await Promise.all([loadTargetHistory(), loadExerciseTargetHistory()])
   const current = history[0]
+  const exerciseCurrent = exerciseHistory[0]
 
   return (
     <main>
@@ -89,6 +102,45 @@ export default async function Settings() {
               <strong>{h.effectiveOn}</strong> — {h.phase}, {h.proteinG}g protein
               {h.calories !== null ? `, ${h.calories} kcal` : ''}, {h.expected.toFixed(1)} lb/week
               expected
+              {h.note ? ` — ${h.note}` : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2>Exercise target</h2>
+      {exerciseCurrent ? (
+        <p className="empty">
+          <strong>{exerciseCurrent.minutesTarget} min/day</strong> since {exerciseCurrent.effectiveOn}
+        </p>
+      ) : (
+        <p className="empty">No exercise target set yet.</p>
+      )}
+
+      <h2>Update exercise target</h2>
+      <form action={updateExerciseTarget} className="settings-form">
+        <label>
+          Minutes/day
+          <input
+            type="number" name="minutesTarget" step="1" min="0"
+            defaultValue={exerciseCurrent?.minutesTarget} required
+          />
+        </label>
+        <label>
+          Note (optional)
+          <input type="text" name="note" placeholder="e.g. raised Apple Watch Exercise ring goal" />
+        </label>
+        <button type="submit">Save</button>
+      </form>
+
+      <h2>Exercise history</h2>
+      {exerciseHistory.length === 0 ? (
+        <p className="empty">Nothing recorded yet.</p>
+      ) : (
+        <ul className="target-history">
+          {exerciseHistory.map((h) => (
+            <li key={h.id}>
+              <strong>{h.effectiveOn}</strong> — {h.minutesTarget} min/day
               {h.note ? ` — ${h.note}` : ''}
             </li>
           ))}
