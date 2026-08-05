@@ -14,11 +14,17 @@ const RANGE_OPTIONS = [30, 90, 365] as const
 
 const DEFAULT_DAYS = {
   weight: 90, bodyFat: 90, leanMass: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90, sleep: 90,
+  // Defaults to the widest window -- "a long-run fitness trend, meaningless
+  // day to day" per its own metric_catalog note, so the short windows aren't
+  // the useful ones here the way they are for everything else.
+  vo2Max: 365,
 } as const
 
 type Metric = keyof typeof DEFAULT_DAYS
 
-const METRICS: Metric[] = ['weight', 'bodyFat', 'leanMass', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep']
+const METRICS: Metric[] = [
+  'weight', 'bodyFat', 'leanMass', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep', 'vo2Max',
+]
 
 const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: number; height: number }> = {
   weight: { title: 'Weight', unit: 'lb', maxGapDays: 5, height: 140 },
@@ -36,6 +42,12 @@ const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: 
   // renders as isolated dots with no connecting line, same as the sparse
   // scatter weight/RHR/HRV get for free.
   sleep: { title: 'Sleep', unit: 'hr', height: 90 },
+  // Real readings land 8-48 days apart (measured against live history) --
+  // a wide maxGapDays connects them into one trend line rather than
+  // shattering into isolated dots the way sleep's ~7%-coverage chart does.
+  // Unlike weight/body-fat/lean-mass, each reading here IS the signal
+  // (not day-to-day wobble), so a connecting line is the honest read.
+  vo2Max: { title: 'VO2 max', unit: 'ml/(kg·min)', maxGapDays: 60, height: 90 },
 }
 
 function resolveDays(raw: string | undefined, fallback: number): number {
@@ -79,9 +91,10 @@ export default async function Trends({
     rhr: resolveDays(params['rhr'], DEFAULT_DAYS.rhr),
     hrv: resolveDays(params['hrv'], DEFAULT_DAYS.hrv),
     sleep: resolveDays(params['sleep'], DEFAULT_DAYS.sleep),
+    vo2Max: resolveDays(params['vo2Max'], DEFAULT_DAYS.vo2Max),
   }
 
-  const [weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep, targets, today, weightTrendLine] =
+  const [weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep, vo2Max, targets, today, weightTrendLine] =
     await Promise.all([
       loadSeries('weight_lbs', days.weight),
       loadSeries('body_fat_pct', days.bodyFat),
@@ -92,6 +105,7 @@ export default async function Trends({
       loadSeries('resting_hr', days.rhr),
       loadSeries('hrv_ms', days.hrv),
       loadSeries('sleep_asleep_min', days.sleep),
+      loadSeries('vo2_max', days.vo2Max),
       loadTargets(),
       loadTodayDate(),
       loadWeightTrendLine(days.weight),
@@ -102,7 +116,7 @@ export default async function Trends({
   const sleepHours: Point[] = sleep.map((p) => ({ observedOn: p.observedOn, value: p.value / 60 }))
 
   const points: Record<Metric, Point[]> = {
-    weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep: sleepHours,
+    weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep: sleepHours, vo2Max,
   }
 
   const proteinStatuses = new Map(
@@ -129,6 +143,7 @@ export default async function Trends({
     rhr: windowStartDate(today, days.rhr),
     hrv: windowStartDate(today, days.hrv),
     sleep: windowStartDate(today, days.sleep),
+    vo2Max: windowStartDate(today, days.vo2Max),
   }
 
   type Extra = {
@@ -170,6 +185,7 @@ export default async function Trends({
     rhr: { markType: 'line' },
     hrv: { markType: 'line' },
     sleep: { markType: 'line' },
+    vo2Max: { markType: 'line' },
   }
 
   return (
