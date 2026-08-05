@@ -13,7 +13,11 @@ export const dynamic = 'force-dynamic'
 const RANGE_OPTIONS = [30, 90, 365] as const
 
 const DEFAULT_DAYS = {
-  weight: 90, bodyFat: 90, leanMass: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90, sleep: 90,
+  weight: 90, bodyFat: 90, leanMass: 90, protein: 30, calories: 30,
+  // Same logging cadence as protein/calories -- all four come from the same
+  // MacroFactor entry.
+  carbs: 30, fat: 30, fiber: 30,
+  steps: 90, rhr: 90, hrv: 90, sleep: 90,
   // Defaults to the widest window -- "a long-run fitness trend, meaningless
   // day to day" per its own metric_catalog note, so the short windows aren't
   // the useful ones here the way they are for everything else.
@@ -23,7 +27,8 @@ const DEFAULT_DAYS = {
 type Metric = keyof typeof DEFAULT_DAYS
 
 const METRICS: Metric[] = [
-  'weight', 'bodyFat', 'leanMass', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep', 'vo2Max',
+  'weight', 'bodyFat', 'leanMass', 'protein', 'calories', 'carbs', 'fat', 'fiber',
+  'steps', 'rhr', 'hrv', 'sleep', 'vo2Max',
 ]
 
 const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: number; height: number }> = {
@@ -34,6 +39,13 @@ const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: 
   leanMass: { title: 'Lean mass', unit: 'lb', maxGapDays: 5, height: 90 },
   protein: { title: 'Protein', unit: 'g', height: 140 },
   calories: { title: 'Calories', height: 90 },
+  // Ingested from MacroFactor and already flow into the `nutrition` view's
+  // SQL, but had no chart at all -- no target exists for any of these three
+  // (only protein/calories have one), so they never get hit/miss coloring.
+  // Names match metric_catalog's own display_name exactly, incl. "Fibre".
+  carbs: { title: 'Carbohydrates', unit: 'g', height: 90 },
+  fat: { title: 'Fat', unit: 'g', height: 90 },
+  fiber: { title: 'Fibre', unit: 'g', height: 90 },
   steps: { title: 'Steps', height: 90 },
   rhr: { title: 'Resting heart rate', unit: 'bpm', maxGapDays: 4, height: 90 },
   hrv: { title: 'HRV', unit: 'ms', maxGapDays: 4, height: 90 },
@@ -87,6 +99,9 @@ export default async function Trends({
     leanMass: resolveDays(params['leanMass'], DEFAULT_DAYS.leanMass),
     protein: resolveDays(params['protein'], DEFAULT_DAYS.protein),
     calories: resolveDays(params['calories'], DEFAULT_DAYS.calories),
+    carbs: resolveDays(params['carbs'], DEFAULT_DAYS.carbs),
+    fat: resolveDays(params['fat'], DEFAULT_DAYS.fat),
+    fiber: resolveDays(params['fiber'], DEFAULT_DAYS.fiber),
     steps: resolveDays(params['steps'], DEFAULT_DAYS.steps),
     rhr: resolveDays(params['rhr'], DEFAULT_DAYS.rhr),
     hrv: resolveDays(params['hrv'], DEFAULT_DAYS.hrv),
@@ -94,29 +109,34 @@ export default async function Trends({
     vo2Max: resolveDays(params['vo2Max'], DEFAULT_DAYS.vo2Max),
   }
 
-  const [weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep, vo2Max, targets, today, weightTrendLine] =
-    await Promise.all([
-      loadSeries('weight_lbs', days.weight),
-      loadSeries('body_fat_pct', days.bodyFat),
-      loadSeries('lean_mass_lbs', days.leanMass),
-      loadSeries('protein_g', days.protein),
-      loadSeries('calories', days.calories),
-      loadSeries('steps', days.steps),
-      loadSeries('resting_hr', days.rhr),
-      loadSeries('hrv_ms', days.hrv),
-      loadSeries('sleep_asleep_min', days.sleep),
-      loadSeries('vo2_max', days.vo2Max),
-      loadTargets(),
-      loadTodayDate(),
-      loadWeightTrendLine(days.weight),
-    ])
+  const [
+    weight, bodyFat, leanMass, protein, calories, carbs, fat, fiber, steps, rhr, hrv, sleep, vo2Max,
+    targets, today, weightTrendLine,
+  ] = await Promise.all([
+    loadSeries('weight_lbs', days.weight),
+    loadSeries('body_fat_pct', days.bodyFat),
+    loadSeries('lean_mass_lbs', days.leanMass),
+    loadSeries('protein_g', days.protein),
+    loadSeries('calories', days.calories),
+    loadSeries('carbs_g', days.carbs),
+    loadSeries('fat_g', days.fat),
+    loadSeries('fiber_g', days.fiber),
+    loadSeries('steps', days.steps),
+    loadSeries('resting_hr', days.rhr),
+    loadSeries('hrv_ms', days.hrv),
+    loadSeries('sleep_asleep_min', days.sleep),
+    loadSeries('vo2_max', days.vo2Max),
+    loadTargets(),
+    loadTodayDate(),
+    loadWeightTrendLine(days.weight),
+  ])
 
   // Minutes -> hours for readability, same pattern as protein/calories'
   // status maps below transforming a raw series before display.
   const sleepHours: Point[] = sleep.map((p) => ({ observedOn: p.observedOn, value: p.value / 60 }))
 
   const points: Record<Metric, Point[]> = {
-    weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep: sleepHours, vo2Max,
+    weight, bodyFat, leanMass, protein, calories, carbs, fat, fiber, steps, rhr, hrv, sleep: sleepHours, vo2Max,
   }
 
   const proteinStatuses = new Map(
@@ -139,6 +159,9 @@ export default async function Trends({
     leanMass: windowStartDate(today, days.leanMass),
     protein: windowStartDate(today, days.protein),
     calories: windowStartDate(today, days.calories),
+    carbs: windowStartDate(today, days.carbs),
+    fat: windowStartDate(today, days.fat),
+    fiber: windowStartDate(today, days.fiber),
     steps: windowStartDate(today, days.steps),
     rhr: windowStartDate(today, days.rhr),
     hrv: windowStartDate(today, days.hrv),
@@ -159,9 +182,12 @@ export default async function Trends({
   // hit/miss target to color against, so a thin coverage window must never
   // silently turn them into a misleading bar chart. connectPoints={false} on
   // weight makes it a scatter -- daily wobble is water weight; the trend
-  // line is what's being read. Protein/Calories are the only two sparse
-  // series with a real target to grade against, so they're the only two that
-  // can ever become bars.
+  // line is what's being read. Protein/Calories are the only two with a real
+  // target, so they're the only two that ever get hit/miss COLOR. Carbs/fat/
+  // fiber have no target (see macrofactor-is-authoritative memory -- this app
+  // tracks, never grades, macros beyond protein/calories) but zero is still a
+  // meaningful baseline for a gram amount, so resolveMarkType can still turn
+  // them into bars when sparse -- just always neutral-colored, no barStatuses.
   const extraFor: Record<Metric, Extra> = {
     weight: { markType: 'line', connectPoints: false, trendBand },
     // Same scatter treatment as weight, same reason: bioimpedance readings
@@ -181,6 +207,9 @@ export default async function Trends({
       barStatuses: caloriesStatuses,
       ...(targets.calories !== null ? { targetLine: targets.calories } : {}),
     },
+    carbs: { markType: resolveMarkType(carbs, days.carbs) },
+    fat: { markType: resolveMarkType(fat, days.fat) },
+    fiber: { markType: resolveMarkType(fiber, days.fiber) },
     steps: { markType: 'line' },
     rhr: { markType: 'line' },
     hrv: { markType: 'line' },
