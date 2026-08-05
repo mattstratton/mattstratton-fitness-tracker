@@ -16,14 +16,6 @@ export type SignalStatus =
   /** Not enough data to say anything honest. Deliberately NOT 'ok'. */
   | 'unknown'
 
-/** A change the app can apply on an explicit tap. Never applied automatically. */
-export type ProposedAction = {
-  kind: 'set_1rm'
-  label: string
-  exerciseKey: string
-  rm1: string
-}
-
 export type Signal = {
   id: string
   title: string
@@ -34,7 +26,6 @@ export type Signal = {
   // Explicit `| undefined` because exactOptionalPropertyTypes is on: several
   // rules compute a detail conditionally and pass undefined when there is none.
   detail?: string | undefined
-  proposedAction?: ProposedAction | undefined
 }
 
 // ---- Input shapes, mirroring the views in db/migrations ---------------------
