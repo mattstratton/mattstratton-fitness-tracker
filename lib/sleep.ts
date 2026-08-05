@@ -23,3 +23,18 @@ export function formatSleepDuration(minutes: number): string {
   const m = Math.round(minutes % 60)
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
+
+/** Stage breakdown as a joinable list, e.g. "core 5h 3m, deep 34m, REM 1h
+ *  26m, awake 12m" -- omits any stage HAE didn't report rather than showing
+ *  a fabricated zero. Null when none of the four stages are present. */
+export function describeSleepStages(
+  sleep: { coreMin: number | null; deepMin: number | null; remMin: number | null; awakeMin: number | null },
+): string | null {
+  const stages = [
+    sleep.coreMin !== null ? `core ${formatSleepDuration(sleep.coreMin)}` : null,
+    sleep.deepMin !== null ? `deep ${formatSleepDuration(sleep.deepMin)}` : null,
+    sleep.remMin !== null ? `REM ${formatSleepDuration(sleep.remMin)}` : null,
+    sleep.awakeMin !== null ? `awake ${formatSleepDuration(sleep.awakeMin)}` : null,
+  ].filter((s): s is string => s !== null)
+  return stages.length > 0 ? stages.join(', ') : null
+}

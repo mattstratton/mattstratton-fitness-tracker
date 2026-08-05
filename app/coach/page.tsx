@@ -1,5 +1,5 @@
 import { loadLatestSleep, loadSignals } from '../../lib/queries.js'
-import { describeSleepAge, formatSleepDuration } from '../../lib/sleep.js'
+import { describeSleepAge, describeSleepStages, formatSleepDuration } from '../../lib/sleep.js'
 import { SignalCard, signalHref } from '../ui.js'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +8,7 @@ export default async function Coach() {
   const [signals, sleep] = await Promise.all([loadSignals(), loadLatestSleep()])
   const rank = { act: 0, watch: 1, unknown: 2, ok: 3 } as const
   const sorted = [...signals].sort((a, b) => rank[a.status] - rank[b.status])
+  const sleepStages = sleep ? describeSleepStages(sleep) : null
 
   return (
     <main>
@@ -24,7 +25,8 @@ export default async function Coach() {
       {sleep ? (
         <p className="empty">
           {describeSleepAge(sleep.ageDays)} ({sleep.observedOn}) — {formatSleepDuration(sleep.asleepMin ?? 0)} asleep
-          {sleep.inBedMin !== null ? ` of ${formatSleepDuration(sleep.inBedMin)} in bed` : ''}. Tracked but not
+          {sleep.inBedMin !== null ? ` of ${formatSleepDuration(sleep.inBedMin)} in bed` : ''}
+          {sleepStages ? ` (${sleepStages})` : ''}. Tracked but not
           monitored here — coverage is too sparse (~7%) to grade, so this is informational only, never a signal.
         </p>
       ) : (
