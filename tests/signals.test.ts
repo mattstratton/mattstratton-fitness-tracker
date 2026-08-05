@@ -4,12 +4,13 @@ import assert from 'node:assert/strict'
 import { calorieAdherence, proteinAdherence, loggingGaps } from '../lib/signals/nutrition.js'
 import { weightTrend, deficitReality } from '../lib/signals/body.js'
 import { overreaching } from '../lib/signals/recovery.js'
+import { activityTrend } from '../lib/signals/activity.js'
 import { stalling, recentMisses, toSessions } from '../lib/signals/lifting.js'
 import { freshness } from '../lib/signals/freshness.js'
 import { parseTiers } from '../lib/signals/tiers.js'
 import { MAINTAIN, BULK } from '../lib/config.js'
 import type { Targets } from '../lib/config.js'
-import type { LiftingSetRow, NutritionDay, RecoveryDay } from '../lib/signals/types.js'
+import type { ActivityDay, LiftingSetRow, NutritionDay, RecoveryDay } from '../lib/signals/types.js'
 
 const day = (n: number) => `2026-07-${String(n).padStart(2, '0')}`
 
@@ -198,6 +199,59 @@ test('recovery: the recent window cannot drag its own baseline', () => {
   const s = overreaching(recovery(rhr, hrv))
   assert.equal(s.status, 'watch')
   assert.match(s.headline, /suppressed resting HR\/HRV/)
+})
+
+// ---- activity ----------------------------------------------------------------
+
+function activity(steps: number[]): ActivityDay[] {
+  return steps.map((v, i) => ({ observedOn: day(i + 1), steps: v }))
+}
+
+test('activity: too few recent days is unknown, not ok', () => {
+  const s = activityTrend(activity([4000, 4200]))
+  assert.equal(s.status, 'unknown')
+  assert.match(s.headline, /Not enough recent step data/)
+})
+
+test('activity: too little baseline history is unknown, not ok', () => {
+  // 15 days total: 7 recent (enough) but only 8 of baseline, well under the
+  // 20-day minimum.
+  const s = activityTrend(activity(Array.from({ length: 15 }, () => 4000)))
+  assert.equal(s.status, 'unknown')
+  assert.match(s.headline, /Not enough step history for a baseline/)
+})
+
+test('activity: a zero-variance baseline is unknown, not judged', () => {
+  // Flat baseline means something is wrong upstream (real activity always
+  // wobbles), not that things are calm.
+  const s = activityTrend(activity([...Array(20).fill(4000), 4000, 4100, 3900, 4200, 4000, 4100, 3950]))
+  assert.equal(s.status, 'unknown')
+})
+
+test('activity: a real drop against baseline is a watch, never an act', () => {
+  // Baseline mean ~4000, SD ~2000 (matches real step-count variability) --
+  // recent week far below even a generous personal range.
+  const baseline = wobble(20, 4000, 2800)
+  const recent = [800, 750, 900, 820, 780, 860, 700]
+  const s = activityTrend(activity([...baseline, ...recent]))
+  assert.equal(s.status, 'watch')
+  assert.match(s.headline, /Activity down this week/)
+})
+
+test('activity: near baseline is ok', () => {
+  const baseline = wobble(20, 4000, 2800)
+  const recent = [4200, 3900, 4500, 3800, 4100, 4000, 3950]
+  const s = activityTrend(activity([...baseline, ...recent]))
+  assert.equal(s.status, 'ok')
+})
+
+test('activity: the recent window cannot drag its own baseline', () => {
+  // If the low recent week were folded into the baseline it would pull the
+  // mean down and mask itself.
+  const baseline = wobble(40, 4000, 2800)
+  const recent = [800, 750, 900, 820, 780, 860, 700]
+  const s = activityTrend(activity([...baseline, ...recent]))
+  assert.equal(s.status, 'watch')
 })
 
 // ---- lifting ---------------------------------------------------------------

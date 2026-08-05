@@ -42,6 +42,10 @@ export type RecoveryDay = {
   hrvMs: number | null
 }
 
+/** A gap is an absent row, never a zero -- same convention as every other
+ *  single-metric series in this app (see lib/queries.ts's loadSeries). */
+export type ActivityDay = { observedOn: string; steps: number }
+
 export type WeightTrendRow = { days: number; weighIns: number; lbsPerWeek: number | null }
 
 export type EnergyRealityRow = {

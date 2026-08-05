@@ -6,6 +6,7 @@
 import { getPool } from './db.js'
 import type { Phase, Targets } from './config.js'
 import { nextWorkoutDay, parseProgramDays } from './liftoscriptProgram.js'
+import { activityTrend } from './signals/activity.js'
 import { deficitReality, weightTrend } from './signals/body.js'
 import { freshness } from './signals/freshness.js'
 import { recentMisses, stalling } from './signals/lifting.js'
@@ -169,7 +170,7 @@ export async function saveTargets(input: {
 export async function loadSignals(): Promise<Signal[]> {
   // Nutrition excludes today: it is a Partial Day and its intake is whatever has
   // been logged so far.
-  const [nut, rec, wt, er, fr, sets, tiers, targets] = await Promise.all([
+  const [nut, rec, wt, er, fr, sets, steps, tiers, targets] = await Promise.all([
     rows<Record<string, unknown>>(
       `SELECT observed_on, calories, protein_g FROM nutrition
        WHERE observed_on BETWEEN today_local() - 7 AND today_local() - 1 ORDER BY 1`,
@@ -184,6 +185,11 @@ export async function loadSignals(): Promise<Signal[]> {
     rows<Record<string, unknown>>(
       `SELECT performed_on, record_id, exercise, set_index, reps, weight_lbs, target_reps, is_amrap
        FROM lifting_sets WHERE performed_on > today_local() - 60 ORDER BY performed_on`,
+    ),
+    rows<Record<string, unknown>>(
+      `SELECT observed_on, value FROM observations_daily
+       WHERE metric = 'steps' AND observed_on > today_local() - 90 AND observed_on < today_local()
+       ORDER BY observed_on`,
     ),
     liftosaurTiers(),
     loadTargets(),
@@ -214,6 +220,7 @@ export async function loadSignals(): Promise<Signal[]> {
     weightLbs: num(r['weight_lbs']), targetReps: num(r['target_reps']),
     isAmrap: r['is_amrap'] === null ? null : Boolean(r['is_amrap']),
   }))
+  const activity = steps.map((r) => ({ observedOn: day(r['observed_on']), steps: Number(r['value']) }))
 
   // Freshness first: everything below it is coached on whatever it reports.
   return [
@@ -224,6 +231,7 @@ export async function loadSignals(): Promise<Signal[]> {
     deficitReality(energy, targets),
     stalling(lifting, tiers),
     overreaching(recovery),
+    activityTrend(activity),
     recentMisses(lifting),
     loggingGaps(nutrition),
   ]
