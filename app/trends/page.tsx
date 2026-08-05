@@ -13,15 +13,19 @@ export const dynamic = 'force-dynamic'
 const RANGE_OPTIONS = [30, 90, 365] as const
 
 const DEFAULT_DAYS = {
-  weight: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90, sleep: 90,
+  weight: 90, bodyFat: 90, leanMass: 90, protein: 30, calories: 30, steps: 90, rhr: 90, hrv: 90, sleep: 90,
 } as const
 
 type Metric = keyof typeof DEFAULT_DAYS
 
-const METRICS: Metric[] = ['weight', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep']
+const METRICS: Metric[] = ['weight', 'bodyFat', 'leanMass', 'protein', 'calories', 'steps', 'rhr', 'hrv', 'sleep']
 
 const CHART_CONFIG: Record<Metric, { title: string; unit?: string; maxGapDays?: number; height: number }> = {
   weight: { title: 'Weight', unit: 'lb', maxGapDays: 5, height: 140 },
+  // Same sparsity/noise profile as weight (bioimpedance wobbles with hydration
+  // and glycogen day to day) -- same maxGapDays, same scatter treatment below.
+  bodyFat: { title: 'Body fat', unit: '%', maxGapDays: 5, height: 90 },
+  leanMass: { title: 'Lean mass', unit: 'lb', maxGapDays: 5, height: 90 },
   protein: { title: 'Protein', unit: 'g', height: 140 },
   calories: { title: 'Calories', height: 90 },
   steps: { title: 'Steps', height: 90 },
@@ -67,6 +71,8 @@ export default async function Trends({
   const params = await searchParams
   const days: Record<Metric, number> = {
     weight: resolveDays(params['weight'], DEFAULT_DAYS.weight),
+    bodyFat: resolveDays(params['bodyFat'], DEFAULT_DAYS.bodyFat),
+    leanMass: resolveDays(params['leanMass'], DEFAULT_DAYS.leanMass),
     protein: resolveDays(params['protein'], DEFAULT_DAYS.protein),
     calories: resolveDays(params['calories'], DEFAULT_DAYS.calories),
     steps: resolveDays(params['steps'], DEFAULT_DAYS.steps),
@@ -75,24 +81,29 @@ export default async function Trends({
     sleep: resolveDays(params['sleep'], DEFAULT_DAYS.sleep),
   }
 
-  const [weight, protein, calories, steps, rhr, hrv, sleep, targets, today, weightTrendLine] = await Promise.all([
-    loadSeries('weight_lbs', days.weight),
-    loadSeries('protein_g', days.protein),
-    loadSeries('calories', days.calories),
-    loadSeries('steps', days.steps),
-    loadSeries('resting_hr', days.rhr),
-    loadSeries('hrv_ms', days.hrv),
-    loadSeries('sleep_asleep_min', days.sleep),
-    loadTargets(),
-    loadTodayDate(),
-    loadWeightTrendLine(days.weight),
-  ])
+  const [weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep, targets, today, weightTrendLine] =
+    await Promise.all([
+      loadSeries('weight_lbs', days.weight),
+      loadSeries('body_fat_pct', days.bodyFat),
+      loadSeries('lean_mass_lbs', days.leanMass),
+      loadSeries('protein_g', days.protein),
+      loadSeries('calories', days.calories),
+      loadSeries('steps', days.steps),
+      loadSeries('resting_hr', days.rhr),
+      loadSeries('hrv_ms', days.hrv),
+      loadSeries('sleep_asleep_min', days.sleep),
+      loadTargets(),
+      loadTodayDate(),
+      loadWeightTrendLine(days.weight),
+    ])
 
   // Minutes -> hours for readability, same pattern as protein/calories'
   // status maps below transforming a raw series before display.
   const sleepHours: Point[] = sleep.map((p) => ({ observedOn: p.observedOn, value: p.value / 60 }))
 
-  const points: Record<Metric, Point[]> = { weight, protein, calories, steps, rhr, hrv, sleep: sleepHours }
+  const points: Record<Metric, Point[]> = {
+    weight, bodyFat, leanMass, protein, calories, steps, rhr, hrv, sleep: sleepHours,
+  }
 
   const proteinStatuses = new Map(
     protein.map((p) => [p.observedOn, resolveBarStatus(p.value, targets.proteinG, 'atLeast')] as const),
@@ -110,6 +121,8 @@ export default async function Trends({
   // happens to sit. Same helper Chart uses, so the two can't drift.
   const starts: Record<Metric, string> = {
     weight: windowStartDate(today, days.weight),
+    bodyFat: windowStartDate(today, days.bodyFat),
+    leanMass: windowStartDate(today, days.leanMass),
     protein: windowStartDate(today, days.protein),
     calories: windowStartDate(today, days.calories),
     steps: windowStartDate(today, days.steps),
@@ -136,6 +149,13 @@ export default async function Trends({
   // can ever become bars.
   const extraFor: Record<Metric, Extra> = {
     weight: { markType: 'line', connectPoints: false, trendBand },
+    // Same scatter treatment as weight, same reason: bioimpedance readings
+    // wobble day to day (hydration, glycogen), so a connecting line would
+    // read as signal that isn't there. No trend band -- that's tied to
+    // nutrition targets (expected/concerning lb/week), which don't apply to
+    // body fat %/lean mass.
+    bodyFat: { markType: 'line', connectPoints: false },
+    leanMass: { markType: 'line', connectPoints: false },
     protein: {
       markType: resolveMarkType(protein, days.protein),
       barStatuses: proteinStatuses,
