@@ -130,3 +130,48 @@ a.empty { display: block; text-decoration: none; }
 .session-exercise li[data-c="failed"] { color: var(--act); }
 .session-exercise li[data-c="short"]  { color: var(--watch); }
 .session-exercise li[data-c="hit"], .session-exercise li[data-c="amrap-hit"] { color: var(--ok); }
+
+/* Ask -- the coaching chat (#8). Deliberately plain: a transcript, a status
+   line, an input. The answers are the feature. */
+.chat { display: flex; flex-direction: column; gap: .5rem; }
+.chat-empty { display: flex; flex-direction: column; gap: .8rem; }
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chat-suggestions button {
+  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 1rem; padding: .35rem .7rem; font-size: .85rem; cursor: pointer;
+}
+.chat-suggestions button:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.chat-suggestions button:disabled { opacity: .5; cursor: default; }
+
+.turn { border-radius: .6rem; padding: .6rem .8rem; white-space: pre-wrap;
+        overflow-wrap: anywhere; }
+.turn[data-role="user"] { background: var(--panel); border: 1px solid var(--line);
+                          align-self: flex-end; max-width: 85%; }
+.turn[data-role="assistant"] { border: 1px solid transparent; padding-left: 0; padding-right: 0; }
+
+/* Reasoning and tool progress. A turn can run for tens of seconds, and silence
+   reads as breakage -- so this says what it is doing, then gets out of the way
+   the moment real answer text starts arriving. */
+.chat-status { color: var(--muted); font-size: .85rem; font-style: italic;
+               margin: 0 0 .25rem; animation: chat-pulse 1.6s ease-in-out infinite; }
+@keyframes chat-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-status { animation: none; opacity: .8; }
+  .cursor { animation: none; }
+}
+.chat-error { color: var(--act); font-size: .9rem; margin: 0; }
+
+.cursor { display: inline-block; width: .5rem; height: 1rem; background: var(--muted);
+          vertical-align: text-bottom; animation: chat-pulse 1.2s ease-in-out infinite; }
+
+.chat-form { display: flex; gap: .5rem; margin-top: .5rem; position: sticky;
+             bottom: 0; background: var(--bg); padding: .5rem 0; }
+.chat-form input {
+  flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+  color: var(--text); border-radius: .5rem; padding: .6rem .7rem;
+}
+.chat-form button {
+  background: var(--accent); color: var(--bg); border: 0; border-radius: .5rem;
+  padding: .6rem 1rem; font-size: 1rem; font-weight: 600; cursor: pointer;
+}
+.chat-form button:disabled { opacity: .5; cursor: default; }

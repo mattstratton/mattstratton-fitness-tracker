@@ -985,3 +985,132 @@ hand-derivation would have gotten wrong or missed the significance of. Filed bac
 #15 as a dated follow-up (~November 2026, once nutrition logging has 2-3 months of
 history) rather than closed outright — the hypotheses aren't rejected, they're just
 not answerable with the data on hand today.
+
+## The coaching chat (#8): the catalog wasn't the index, and the views lie about precision
+
+Three findings, one of them the "configured something that appears correct and does
+nothing" kind this log keeps collecting.
+
+### 1. `metric_catalog` covers 38 of 81 metrics, and building the metric index on it
+would have hidden the other 43
+
+`CLAUDE.md` says "81 metrics exist. Anything not in a view is queryable by name in
+`observations_daily`", and `metric_catalog` is described as holding "canonical units
+and an `attention` grade". Both true. The wrong inference — the one the plan for #8
+made — is that `metric_catalog` is therefore the list of metrics. It isn't:
+
+```
+in_data  catalogued  uncatalogued
+81       38          43
+```
+
+The uncatalogued 43 are not stale junk. Sorted by coverage they start
+`walking_running_distance` (3,864 days, latest 2026-08-11), `flights_climbed`
+(3,032), `walking_heart_rate_average` (2,292), `apple_stand_hour`,
+`environmental_audio_exposure`, `physical_effort`, `time_in_daylight` — plus the
+entire micronutrient panel (`cholesterol`, `vitamin_d`, `folate`, `niacin`, and a
+dozen more), all current to 2026-08-10 because MacroFactor logs micros.
+
+So a `list_metrics` tool reading the catalog would have compiled, typechecked,
+returned 38 plausible rows, and made the chat answer "I don't have that" about
+walking distance and every vitamin — data sitting right there. It was caught by
+printing `.length` from a throwaway probe script against the real database and
+noticing 38 where 81 was expected. No test would have caught it: the tool worked
+exactly as written.
+
+The fix inverts the join — drive from `observations_daily` and LEFT JOIN the
+catalog, so an uncatalogued metric appears with `catalogued: false` and a null unit
+rather than not appearing. Cost is one 90ms aggregate (measured with EXPLAIN
+ANALYZE, 81 groups over the full CAGG) per call, which is fine for a tool.
+
+While in there, the same query got `days365` and `latest` per metric, which turned
+out to matter for a different reason — see finding 3.
+
+### 2. The views return float accumulation noise, and it reaches the model as false precision
+
+Real rows, straight out of `nutrition` and `observations_daily`:
+
+```
+observed_on  calories            protein_g           fiber_g
+2026-08-08   1370.9033333354562  187.9353333412348   20.970000000074002
+2026-08-09   271.6469919206364   (weight_lbs)
+```
+
+Summing float columns does this. Two problems once it reaches an LLM. It is false
+precision — a scale that reports to 0.2 lb did not measure thirteen decimal places,
+and an answer quoting them implies a rigour the data does not have. And it is pure
+token cost: eighteen characters where six will do, on every point of every series.
+
+Rounded to 2dp at the tool boundary rather than in `lib/queries.ts`, on the
+principle that the data layer should return what the database holds and the tool
+layer is already the place whose job is shaping results for the model. Done inside
+the single `json()` helper every tool return passes through, so it cannot be
+forgotten on a new tool. `get_nutrition`'s payload dropped 32% (1011 → 688 chars)
+for a 7-day window; over a 90-day series the saving is proportionally larger.
+
+### 3. Three probes passed for reasons the prompt never states
+
+The nine trap probes all passed first run, which was not the expected outcome and
+is worth being precise about rather than claiming credit for. Three of them passed
+on reasoning the prompt does not contain:
+
+- Asked "what's my vo2 max doing?", it reported the trend and then added that
+  VO2max is body-mass-scaled, so losing weight raises the number on its own, and
+  concluded "not declining while cutting" rather than a fitness gain. Nothing in
+  `lib/coach/context.ts` mentions VO2max.
+- Asked "am I stalling on squat?", it split T1 from T2 by inspecting the weights
+  and set counts — the tier hint in `lib/signals/tiers.ts` is not exposed to any
+  tool.
+- Asked about sleep, it called `list_metrics` (not the sleep tool alone), read the
+  `days365` field added in finding 1, and refused to trend 23 nights.
+
+The last one is the useful one, because it was accidental. `days365` was added to
+make the metric index honest about coverage; the model used it as a generic
+"is there enough data to answer this" gate. That is worth knowing before trimming
+anything from a tool payload on token grounds — a field added for one reason got
+used for a better one.
+
+### Numbers measured
+
+- Prompt cache: `cacheRead=7069, cacheWrite=0` on every turn after the first, so
+  the system prompt plus 13 tool definitions is ~7k tokens and is being served
+  from cache. Confirms the breakpoint placement (one marker on the system block,
+  tools render before system, nothing volatile above it).
+- One substantive two-iteration turn: cacheRead 14,138 · input 1,974 · output
+  1,085 ≈ **$0.044** at Opus 5 list rates. #8 estimated "roughly a cent or two",
+  which is right for a one-tool question and roughly 2-3x low for a multi-tool one.
+- Turn latency 5–31s, the long end being multi-tool answers. Streaming plus a
+  visible status line was not a nicety; 31 seconds of silence reads as a hang.
+- Live targets during testing were **1473 kcal / 194g protein**, against
+  `nutrition-strategy.md`'s 1660/198. The docs are eight weeks stale and the
+  database is right — which is the whole argument for the rule that no target
+  value may be hardcoded in the prompt. A prompt written from the strategy doc
+  would already be wrong.
+
+### Still open
+
+The `/ask` UI has not been rendered in a browser — the Chrome extension could not
+inject into `localhost`, and the SSE format is only verified via curl plus unit
+tests on `decodeChunk`. And the `unknown` signal path is untested against live
+data because nothing is currently `unknown`; the instruction is tested, the
+behaviour is not.
+
+### Addendum: `npm test` and `npm run build` both pass over a type error in `tests/`
+
+Worth writing down because it wasted a real amount of confidence. `tests/coach.test.ts`
+read `tool.description` off the `COACH_TOOLS` array. `betaTool` is typed as a union
+over every tool kind the SDK supports — including built-ins like the memory tool,
+which carry no `description` — so that access does not typecheck.
+
+Both of the commands you would reach for said everything was fine. `npm test` runs
+`tsx`, which strips types without checking them, so 191 tests passed. `npm run
+build` runs Next's TypeScript step, which only covers the files in the Next program
+— `app/` and `lib/`, not `tests/` — so it printed "Finished TypeScript" too. Only
+`npm run typecheck` (`tsc --noEmit`, whole project) caught it.
+
+`CLAUDE.md` already says to run `npm test` **and** `npm run typecheck` before
+pushing. This is the concrete reason the second one is not redundant: the two green
+checks that feel like enough do not cover test files at all. The fix was to narrow
+once in `lib/coach/tools.ts` (`COACH_TOOL_SPECS`) rather than cast at each use, so
+the tests keep asserting on descriptions — which is where several of the trap
+warnings live.
