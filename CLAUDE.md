@@ -45,10 +45,17 @@ and the schema depends on them:
 | `health_workouts` | Apple's view of sessions, with energy and duration |
 | `training_sessions` | **reconciled** — use this to count training, not the two above |
 | `data_freshness` | per-source recency |
-| `metric_catalog` | canonical units and an `attention` grade |
+| `metric_catalog` | canonical units and an `attention` grade — **only 38 of the 81 metrics** |
 
 81 metrics exist. Anything not in a view is queryable by name in
 `observations_daily` — `SELECT DISTINCT metric FROM observations_daily`.
+
+**`metric_catalog` is not the list of metrics.** It covers 38; the other 43 are
+stored under their own names and are not stale — `walking_running_distance`,
+`flights_climbed`, `physical_effort`, `time_in_daylight` and the whole
+micronutrient panel are all current. To enumerate metrics, drive from
+`observations_daily` and LEFT JOIN the catalog for units; reading the catalog
+alone silently hides a third of the dataset. See `loadMetricIndex()`.
 
 ## Traps
 
@@ -88,11 +95,14 @@ push (personal Vercel scope `mattystratton` — never TigerData's).
 |---|---|
 | `app/page.tsx` | glance: today's tiles, then signals needing attention |
 | `app/coach/page.tsx` | every signal with its reasoning |
+| `app/ask/page.tsx` | the coaching chat — LLM over the data, read-only |
 | `app/trends/page.tsx` | charts, 30/90/365d |
 | `app/settings/page.tsx` | edit nutrition targets (`nutrition_targets` table) and see the change history |
 | `app/api/hae/route.ts` | HAE's push endpoint (bearer token) |
 | `app/api/cron/*` | daily Liftosaur sync and freshness check |
 | `lib/signals/` | the coaching rules — **pure functions, fixture-tested** |
+| `lib/coach/` | the chat's tools, prompt, SSE codec and auth guard |
+| `app/api/coach/route.ts` | the chat's turn endpoint (streams SSE) |
 | `lib/queries.ts` | the only place with SQL for the pages |
 
 It exists because `/coach` can't run on Claude iOS (enterprise config blocks the
@@ -101,8 +111,16 @@ Liftosaur MCP), so coaching on a phone had no other route.
 **Rules for changing it:**
 
 - Signals stay **pure**. No SQL, no fetch, no clock reads inside a rule — that's
-  what makes them fixture-testable and reusable as LLM tools later. Fetching
-  belongs in `lib/queries.ts`.
+  what makes them fixture-testable, and it's why the chat can call them as a tool
+  rather than re-deriving them in a prompt. Fetching belongs in `lib/queries.ts`.
+- **The chat's traps are enforced by tool shape, not prompt text.** Windowed tools
+  exclude today in SQL, gaps stay absent, `health_workouts` is reachable from no
+  tool, and `energy_balance` cannot be fetched without `energy_reality_check`.
+  Before adding a tool, read `docs/adr/0006` — a tool that lets one of those back
+  in defeats the design even if the prompt still warns about it. Never hardcode a
+  target value in `lib/coach/context.ts`; targets come from the database.
+- **`/api/coach` authenticates itself.** `proxy.ts` excludes `/api`, so any new
+  route there is open until it calls `isAuthorizedApiSession` (or a bearer check).
 - Signals return `unknown` when there isn't enough data. Never collapse that into
   `ok`; this dataset produces it constantly.
 - **Today is read from raw `observations`, not `observations_daily`.** The
@@ -118,6 +136,11 @@ Liftosaur MCP), so coaching on a phone had no other route.
   *not* be true.
 
 `npm run dev` locally; `npm test` and `npm run typecheck` before pushing.
+
+After changing the chat's prompt, tool descriptions, or model config, re-run the
+**trap probes** in `docs/superpowers/specs/2026-08-11-coach-chat-design.md`. They
+are the only check on whether answers are *good* rather than merely well-formed,
+and `npm test` cannot cover it.
 
 ## Record what we learn — this is not optional
 

@@ -16,11 +16,18 @@ openssl rand -hex 32   # HAE_INGEST_TOKEN
 openssl rand -hex 32   # CRON_SECRET
 ```
 
-Set four variables in the Vercel project: `DATABASE_URL`, `LIFTOSAUR_API_KEY`,
-`HAE_INGEST_TOKEN`, `CRON_SECRET`. See `.env.example`.
+Set these in the Vercel project: `DATABASE_URL`, `LIFTOSAUR_API_KEY`,
+`HAE_INGEST_TOKEN`, `CRON_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`,
+`AUTH_SECRET`, `ANTHROPIC_API_KEY`. See `.env.example`.
 
 Both tokens fail **closed**: if unset, the routes reject every request rather
-than running unauthenticated.
+than running unauthenticated. So does `ANTHROPIC_API_KEY` — `/api/coach` returns
+500 rather than degrading.
+
+> **`ANTHROPIC_API_KEY` must be a personal key**, for the same reason as the
+> Vercel scope and the Tiger Cloud project (docs/adr/0005): tool results carry
+> personal health data, and it should not land in a work account's request logs
+> or on company billing.
 
 ## 2. Link and deploy
 
