@@ -34,9 +34,12 @@ WITH NO DATA;
 -- weigh-in is useless -- and the query cost is irrelevant at this data volume.
 ALTER MATERIALIZED VIEW observations_daily SET (timescaledb.materialized_only = false);
 
--- start_offset NULL so Restatements of older days are always re-materialized.
--- HAE restates within roughly a week, and there is no retention on observations
--- to bound this against.
+-- start_offset NULL so Restatements of older days are always re-materialized,
+-- however late they arrive. The observed restatement window is one day (see
+-- 0001) but that is a five-day sample, and there is no retention on
+-- observations to bound this against, so NULL rather than a guessed interval:
+-- the cost of re-materializing old buckets at this volume is nothing, and the
+-- cost of picking a window narrower than reality is a silently stale value.
 SELECT add_continuous_aggregate_policy('observations_daily',
     start_offset      => NULL,
     end_offset        => INTERVAL '1 hour',

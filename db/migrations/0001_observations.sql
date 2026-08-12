@@ -65,20 +65,33 @@ CREATE TABLE observations (
     tsdb.orderby = 'metric, observed_on DESC'
 );
 
--- Yearly chunks. 56k observations across 2016-2026 is ~5k rows/year, so this
+-- Yearly chunks. 73k Reports across 2016-2026 is ~6.6k rows/year, so this
 -- gives ~11 fat chunks rather than 44 thin ones, and each holds enough rows to
 -- fill several compression batches.
 --
--- The deciding reason is Restatements, though: HAE revises a day for about a
--- week afterwards. With yearly chunks that entire window lives inside the
--- current, uncompressed chunk, so a Restatement never has to decompress
--- anything. Quarterly chunks would put late Restatements of a previous quarter
--- into already-compressed data.
+-- The deciding reason is Restatements, though: HAE keeps revising a day after
+-- that day has closed, so the revision window has to sit inside the chunk that
+-- is still uncompressed. Quarterly chunks would put late Restatements of a
+-- previous quarter into already-compressed data.
+--
+-- How wide is that window? MEASURED: one day. Live pushes that change a value
+-- arrive at a lag of 1 -- the day ends, HAE reports on it again the next day,
+-- and the value still moves (basal_energy_kcal for 2026-08-09 went 1842 ->
+-- 1834 -> 2319 across reports on the 10th and 11th). Nothing observed at lag 2
+-- or beyond has changed a value yet. ASSUMED: longer, because the live
+-- pipeline has only been running since 2026-08-07 and a five-day sample cannot
+-- rule out a tail it has not lived through.
+--
+-- Yearly chunks are wildly conservative for either figure, which is the point:
+-- the interval was chosen so the answer does not have to be exact. Do not
+-- restate the assumption as a measurement.
 SELECT set_chunk_time_interval('observations', INTERVAL '1 year');
 
 -- tsdb.enable_columnstore auto-creates a 7-day columnstore policy, so override
--- rather than add. Chunks close at year end and the Restatement window is ~7
--- days, so 30 days past a chunk's range is comfortably safe.
+-- rather than add. Chunks close at year end and the observed Restatement
+-- window is a day (see above; longer is assumed, not measured), so 30 days
+-- past a chunk's range leaves margin for a tail several times wider than
+-- anything seen so far.
 CALL remove_columnstore_policy('observations', if_exists => true);
 CALL add_columnstore_policy('observations', after => INTERVAL '30 days');
 

@@ -1,8 +1,9 @@
 # mattstratton-fitness-tracker
 
 Personal fitness data: lifting from Liftosaur, nutrition from MacroFactor, and
-everything else from Apple Health — landing in TimescaleDB on Tiger Cloud, where
-Claude Code queries it for coaching conversations.
+everything else from Apple Health — landing in TimescaleDB on Tiger Cloud, with a
+web app that grades it against deterministic rules and a chat that answers questions
+about it.
 
 Roughly 69,000 observations across 81 metrics going back to **2016**, plus 2,400
 lifting sets and 800 workouts.
@@ -45,15 +46,47 @@ No files, no iCloud, no laptop. The Mac is not infrastructure —
 
 - **today** — what's logged so far, then anything needing attention
 - **coach** — every signal with its reasoning
+- **ask** — a chat that answers questions about the data
+- **workouts** — session history set by set, and what the program prescribes next
 - **trends** — charts over 30/90/365 days
-
-The coaching is deterministic: protein adherence, deficit-vs-scale, weight trend,
-overreaching, stalled lifts, freshness. Each is a pure function in
-`lib/signals/`, unit-tested against fixtures, so a verdict can be traced to a
-rule rather than a vibe. No LLM involved.
+- **settings** — nutrition and exercise targets, with their change history
 
 It exists because the `/coach` skill can't run on Claude iOS, so coaching on a
 phone — which is where the question actually gets asked — had no other route.
+
+There are two coaching modes and they are deliberately kept apart.
+
+**coach is deterministic.** Protein adherence, deficit-vs-scale, weight trend,
+overreaching, stalled lifts, freshness. Each is a pure function in `lib/signals/`,
+unit-tested against fixtures, so a verdict traces to a rule rather than a vibe.
+No LLM is involved in any of it, and `unknown` is a distinct verdict from `ok` —
+this dataset produces it constantly.
+
+**ask is an LLM** — Claude, server-side, over 13 read-only tools. It answers the
+questions nobody wrote a rule for: "am I stalling on squat", "how big is my deficit
+actually", "what's my VO2max doing". Every number in an answer comes from a tool
+call you can read in `lib/coach/tools.ts`.
+
+### Why ask is built the way it is
+
+The obvious design — hand the model SQL — is the one this repo rejects. Six traps in
+this data have each already produced a wrong answer here at least once: today is a
+Partial Day, a gap is not a zero, Apple shadow-copies every Liftosaur session so its
+workout view roughly doubles training volume, `energy_balance` overstates the deficit
+by ~2.6x, a single weigh-in is noise, and `reps: 0` is a set that was attempted and
+failed rather than one that is missing.
+
+Given SQL, a model walks into all six. Told about them in a prompt, it gets them
+right *most* of the time — which is the worse failure mode, because rare wrong
+answers get trusted. So they are foreclosed by the shape of the tools instead:
+windowed queries end `AND observed_on < today_local()`, gaps stay absent rows, no
+tool reaches Apple's workout view at all, and `energy_balance` cannot be fetched
+without its reality check in the same payload. The prompt still describes the traps;
+it is not what is holding them.
+
+It is read-only — there is no write tool to disable. Program changes stay in
+Liftosaur and macro targets stay MacroFactor's call.
+[docs/adr/0006](docs/adr/0006-typed-tools-not-sql-for-the-chat.md) has the reasoning.
 
 ## Reading the data
 
@@ -77,10 +110,13 @@ source told us, at this time, what this metric was on this day". Nothing is ever
 updated. Current truth is `observations_daily`, a continuous aggregate computing
 `last(value, reported_at)`.
 
-That matters because HAE revises a day for about a week after it happens, and the
-old SQLite schema overwrote silently. Two bugs hid in that: a five-day stretch
-where an iOS update dropped HealthKit permission for weight while every sync
-reported success, and a midday export that made a 1241 kcal day look like 333.
+That matters because HAE keeps revising a day after that day has closed, and the
+old SQLite schema overwrote silently. Of the observations this pipeline has
+watched land live — a four-day sample, so read it as directional — **69% had their
+value change after the day they describe had already closed** (measured 2026-08-12).
+Two bugs hid in that overwriting: a five-day stretch where an iOS update dropped
+HealthKit permission for weight while every sync reported success, and a midday
+export that made a 1241 kcal day look like 333.
 Both are now visible as data. See
 [docs/adr/0001](docs/adr/0001-append-reports-never-update-observations.md).
 
@@ -101,6 +137,7 @@ defined in [CONTEXT.md](CONTEXT.md). It is worth two minutes.
 
 | | |
 |---|---|
+| `npm run dev` | run the app locally |
 | `npm run q "SQL"` | query the database |
 | `npm test` | 192 unit tests — parsers, signals, auth, chat tooling |
 | `npm run typecheck` | tsc |

@@ -69,8 +69,14 @@ alone silently hides a third of the dataset. See `loadMetricIndex()`.
 - **Today is partial.** A midday export once made a 1241 kcal day look like 333.
 - **`program` is sometimes an app**, not a program: 1,218 rows say `Hevy`, which
   is imported history.
-- Sleep has ~7% coverage. It is stored but deliberately unmonitored; don't build
-  conclusions on it.
+- **Sleep coverage is changing and the old "~7%" figure now misleads.** Measured
+  2026-08-12: 6.3% over 365 days, 23.3% over 90, **70% over the last 30** (21 of
+  23 recorded nights in the whole year fall in the last month). The historical
+  sparseness is real and the recent improvement is real; a single number cannot
+  say both. Sleep is still unmonitored and still not safe to trend over long
+  windows, but "there's basically no sleep data" is no longer true of the
+  current window. Re-measure before quoting, and revisit whether the
+  unmonitored rule still earns its keep.
 
 ## Freshness
 
