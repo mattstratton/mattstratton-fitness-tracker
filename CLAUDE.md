@@ -13,6 +13,15 @@ whichever Tiger Cloud project was last selected. `npm run q` reads `DATABASE_URL
 from this repo's `.env`, so the database is chosen by the working directory. It
 also refuses writes unless `ALLOW_WRITES=1`.
 
+**`ALLOW_WRITES=1` is for one-off data repair, never for a change that should
+persist.** If a write corrects something the schema or a seed got wrong, it
+belongs in `db/migrations/` so every database converges by running
+`npm run migrate` instead of by someone remembering what they typed. Migration
+0011 exists because a `metric_catalog` note was fixed by hand first: the live
+row and the seed in 0004 then agreed only by coincidence, and nothing in version
+control would have reproduced it. Write the migration; make it idempotent so it
+is a no-op on a fresh install.
+
 ## The person
 
 Matty. Lifter on **GZCLP: Blacknoir version** in Liftosaur (program `viohtrec`),
