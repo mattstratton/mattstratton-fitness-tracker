@@ -124,6 +124,14 @@ Health data, secrets, exports and `node_modules` are gitignored. Keep it that wa
 
 ## License
 
-The **code** is MIT (`LICENSE`). The **prose** — `docs/` including the migration log
-and the ADRs, plus the root Markdown files — is CC BY 4.0 (`LICENSE-docs`): quote and
-adapt it with credit, and please link rather than repost in full.
+Dual-licensed, deliberately:
+
+- **Code** — MIT. See `LICENSE`. Applies to everything under `app/`, `lib/`, `scripts/`,
+  `db/` and `tests/`.
+- **Prose** — CC BY 4.0. See `LICENSE-docs`. Applies to the Markdown: `docs/` (including
+  the migration log and the ADRs), this README, `CLAUDE.md`, `CONTEXT.md`, and the
+  strategy and tactics notes. Quote and adapt it with credit; please link rather than
+  repost in full.
+
+Where MIT's boilerplate refers to "associated documentation files", the split above
+governs: the prose is CC BY 4.0, not MIT.
