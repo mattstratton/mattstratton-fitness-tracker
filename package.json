@@ -17,7 +17,9 @@
     "q": "tsx scripts/q.ts",
     "build": "next build",
     "dev": "next dev",
-    "start": "next start"
+    "start": "next start",
+    "verify-signals": "tsx scripts/verify-signal-history.ts",
+    "probe-coach": "tsx scripts/probe-coach.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

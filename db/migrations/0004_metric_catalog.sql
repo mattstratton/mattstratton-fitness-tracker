@@ -69,11 +69,15 @@ INSERT INTO metric_catalog
 ('hrv_ms',             'HRV',               'ms',        'core',    7, false, null),
 
 -- ---- tracked: real, but too sparse or too slow to monitor -------------------
--- Sleep is deliberately NOT monitored: 16 points in 19 months (6.6% of 2026).
--- It matters enormously in principle and is worth accumulating forward, but
--- alerting on it today would be pure noise.
+-- Sleep is deliberately NOT monitored. When this migration was written it had
+-- 16 points in 19 months, 6.6% of 2026, and alerting on that would have been
+-- pure noise. That figure is a snapshot, not a property of the metric: by
+-- 2026-08-12 the trailing year was still 6.3% while the last 30 days were at
+-- 70%, because overnight watch-wear changed. Do not restate a coverage number
+-- as a standing fact anywhere -- list_metrics computes it on demand, and a
+-- copy of it in the coach prompt went stale and got repeated to the user.
 ('sleep_asleep_min',   'Asleep',            'min',       'tracked', null, false,
-    'Only ~7% coverage. Excluded from freshness until watch-wear improves.'),
+    'Excluded from freshness: coverage swings with watch-wear. Read current coverage from list_metrics rather than assuming a figure.'),
 ('sleep_in_bed_min',   'In bed',            'min',       'tracked', null, false, null),
 ('sleep_core_min',     'Core sleep',        'min',       'tracked', null, false, null),
 ('sleep_deep_min',     'Deep sleep',        'min',       'tracked', null, false, null),

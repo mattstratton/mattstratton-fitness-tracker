@@ -524,8 +524,11 @@ export type MetricIndexRow = {
  * grade, which is worth saying out loud rather than hiding.
  *
  * `days365` and `latest` ride along so coverage can be judged BEFORE a
- * conclusion is drawn. Sleep is the standing example of why: ~7% coverage,
- * stored deliberately, and not something to build a verdict on.
+ * conclusion is drawn. Sleep is the standing example of why, and of why the
+ * figure belongs here rather than in prose: its coverage moved from 6.6% of a
+ * year to 70% of a month as watch-wear changed, and the copy of the old number
+ * that lived in the coach prompt got repeated to the user long after it stopped
+ * being true. This function is the answer to "how much of X do I have".
  */
 export async function loadMetricIndex(): Promise<MetricIndexRow[]> {
   const r = await rows<Record<string, unknown>>(
@@ -576,9 +579,10 @@ export type SleepNight = {
   awakeMin: number | null
 }
 
-/** Most recent night on record, however old, with its age in days. Sleep has
- *  ~7% coverage so "most recent" can be stale for a while -- this never hides
- *  or judges that; callers decide what to do with ageDays. */
+/** Most recent night on record, however old, with its age in days. Sleep
+ *  coverage swings with watch-wear, so "most recent" can be last night or last
+ *  month -- this never hides or judges that; callers decide what to do with
+ *  ageDays. */
 export async function loadLatestSleep(): Promise<SleepNight | null> {
   const r = await rows<Record<string, unknown>>(
     `SELECT observed_on, (today_local() - observed_on) AS age_days,

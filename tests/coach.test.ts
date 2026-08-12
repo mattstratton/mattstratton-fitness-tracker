@@ -321,7 +321,21 @@ test('prompt: carries the remaining data traps', () => {
   assert.match(prompt, /reps: 0` means the set was/)
   assert.match(prompt, /2\.6x/)
   assert.match(prompt, /single weigh-in is noise/)
-  assert.match(prompt, /7% coverage/)
+  assert.match(prompt, /Sleep is stored and deliberately unmonitored/)
+})
+
+test('prompt: hardcodes no coverage figure', () => {
+  // This assertion used to be its own inverse: it REQUIRED the prompt to
+  // contain "7% coverage", which is how that figure survived becoming wrong.
+  // Sleep coverage went from 6.6% of 2026 to 70% of the last 30 days as
+  // overnight watch-wear changed, and the chat then repeated the stale number
+  // back to the user with total confidence, sourced from this prompt rather
+  // than from the data.
+  //
+  // list_metrics computes coverage on demand. A percentage written in here is
+  // a number the model did not get from a tool, which the rule two bullets
+  // further down explicitly forbids.
+  assert.doesNotMatch(buildSystemPrompt(), /\d+(\.\d+)?%\s*coverage/i)
 })
 
 test('prompt: forbids numbers that did not come from a tool', () => {

@@ -1,9 +1,10 @@
 // Pure sleep-display logic: how to describe a night, never how to judge one.
 //
 // Mirrors lib/signals/ and lib/charting.ts -- no SQL, no fetch, no clock
-// reads. Sleep has ~7% coverage (CLAUDE.md) and is deliberately unmonitored --
-// there is no Signal here and never should be. Callers decide what to show;
-// this only formats.
+// reads. Sleep is deliberately unmonitored -- there is no Signal here and never
+// should be -- because its coverage swings with overnight watch-wear rather than
+// sitting at any fixed rate worth quoting. Callers decide what to show; this
+// only formats.
 
 export const RECENT_SLEEP_DAYS = 3
 

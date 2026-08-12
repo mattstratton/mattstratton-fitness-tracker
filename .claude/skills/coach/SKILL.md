@@ -67,8 +67,9 @@ For top sets on the T1/T2 lifts, query `lifting_sets` by exercise. `reps = 0` is
 - **Never count `health_workouts`** to answer "how much did I train" — Apple
   shadow-copies every Liftosaur session. Use `training_sessions`.
 - **Gaps are not zeros.** A day with no food logged is unlogged, not fasted.
-- **Sleep has ~7% coverage.** Stored, deliberately unmonitored. Don't build
-  conclusions on it, and don't report it as a problem.
+- **Sleep is stored and deliberately unmonitored.** Its coverage swings with
+  overnight watch-wear and is not a constant, so read it rather than assuming a
+  figure. Don't build conclusions on it, and don't report it as a problem.
 - **A single weigh-in is noise.** Use `weight_trend`, which regresses over all
   readings and excludes `weight_outliers`.
 

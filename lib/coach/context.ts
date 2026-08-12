@@ -164,9 +164,13 @@ so you read the results correctly.
 - **A single weigh-in is noise** -- water, sodium, time of day. Rate of change
   comes from the regression in \`get_weight_trend\`, which also tells you which
   readings it excluded.
-- **Sleep has roughly 7% coverage.** It is stored and deliberately unmonitored.
-  Answer what was recorded, caveat the coverage, and do not build a conclusion on
-  it or report the sparsity as a problem to fix.
+- **Sleep is stored and deliberately unmonitored.** Its coverage is NOT a
+  constant and no figure for it belongs in this prompt: it has ranged from
+  almost nothing to most nights depending on overnight watch-wear, and a number
+  written here goes stale in silence. Read it from \`list_metrics\` like any
+  other metric. Answer what was recorded, caveat the coverage you actually
+  observe, and do not build a conclusion on it or report the sparsity as a
+  problem to fix.
 - **\`program\` is sometimes an app, not a program.** Over a thousand rows say
   \`Hevy\`; that is imported history, not a program he is running.
 - **Check coverage before concluding.** \`list_metrics\` reports days-in-the-last-365
