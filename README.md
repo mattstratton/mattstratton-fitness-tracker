@@ -7,6 +7,10 @@ Claude Code queries it for coaching conversations.
 Roughly 69,000 observations across 81 metrics going back to **2016**, plus 2,400
 lifting sets and 800 workouts.
 
+> **Not medical advice.** This is one person's tracker with thresholds tuned to one
+> person's circumstances (including a GLP-1) — nothing here is clinical guidance, and
+> the signals may be wrong or actively harmful for anyone else.
+
 ## Where the data lives
 
 > **Personal health data is in a hosted database.** An earlier version of this
@@ -98,7 +102,7 @@ defined in [CONTEXT.md](CONTEXT.md). It is worth two minutes.
 | | |
 |---|---|
 | `npm run q "SQL"` | query the database |
-| `npm test` | 35 parser and auth tests |
+| `npm test` | 192 unit tests — parsers, signals, auth, chat tooling |
 | `npm run typecheck` | tsc |
 | `npm run migrate` | apply `db/migrations/*.sql` |
 | `npm run backfill` | load `exports/*.json` |
@@ -110,8 +114,16 @@ defined in [CONTEXT.md](CONTEXT.md). It is worth two minutes.
 
 - `db/migrations/` — schema. Read `0001` first; the comments explain the choices.
 - `lib/` — parsers and write path, shared by the API and the scripts so they cannot drift.
-- `api/` — the three Vercel functions.
-- `docs/adr/` — five decisions that were hard to reverse.
+- `app/` — the Next.js app: pages, and the API routes under `app/api/`.
+- `lib/signals/` — the coaching rules. Pure functions, fixture-tested.
+- `lib/coach/` — the `/ask` chat's tools, prompt and auth guard. See `docs/adr/0006`.
+- `docs/adr/` — six decisions that were hard to reverse.
 - `docs/migration-log.md` — what went wrong on the way here, kept for a writeup.
 
 Health data, secrets, exports and `node_modules` are gitignored. Keep it that way.
+
+## License
+
+The **code** is MIT (`LICENSE`). The **prose** — `docs/` including the migration log
+and the ADRs, plus the root Markdown files — is CC BY 4.0 (`LICENSE-docs`): quote and
+adapt it with credit, and please link rather than repost in full.
