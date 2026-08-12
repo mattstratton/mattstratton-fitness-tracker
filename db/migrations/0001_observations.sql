@@ -40,11 +40,24 @@ CREATE TABLE observations (
     tsdb.partition_column = 'observed_on',
     tsdb.enable_columnstore = true,
     -- Deliberately NO segmentby, which is not the obvious choice -- `metric`
-    -- is. Measured density rules it out: across 56k observations and 74
-    -- metrics, a yearly chunk averages ~69 rows per metric (139 in the densest
-    -- year, single digits for the micronutrients) against a guideline of >100
-    -- rows per segment value per chunk. Segmenting would produce dozens of
+    -- is. What rules it out is the DISTRIBUTION of rows per metric per yearly
+    -- chunk, not the average. The average is actively misleading here: a
+    -- handful of every-single-day metrics (step_count and friends) drag it to
+    -- ~135, comfortably past the >100 rows-per-segment-value guideline, while
+    -- most metrics sit nowhere near it. Measured over 73k loaded rows across
+    -- 81 metrics, the majority of years have more metrics below the guideline
+    -- than above it -- 2025 has 23 at-or-above 100 against 53 below, 46 of
+    -- those under 20 rows, median 3. Segmenting would produce dozens of
     -- near-empty compression batches and compress worse, not better.
+    --
+    -- An earlier version of this comment claimed "~69 rows per metric". That
+    -- was computed from the 56k points in the export scan rather than from
+    -- loaded rows, and the parser fans out (heart_rate -> 3 metrics,
+    -- sleep_analysis -> 6), so 73k rows actually landed. Right conclusion,
+    -- wrong arithmetic, and wrong in the direction that would have reversed
+    -- the decision if anyone had trusted it. Compute rows-per-segment-value
+    -- from the table, not from the input file, and look at the spread.
+    --
     -- Ordering by metric instead groups each metric's rows contiguously, which
     -- is where the compression actually comes from, and the automatic minmax
     -- sparse index on an orderby column still gives batch exclusion for

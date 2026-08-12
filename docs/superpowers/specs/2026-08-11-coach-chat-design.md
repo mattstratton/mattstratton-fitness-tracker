@@ -96,14 +96,19 @@ why streaming and a visible status line were not optional.
 
 ## Known gaps
 
-- **The `/ask` UI has not been eyeballed in a browser.** The SSE wire format is
-  verified end-to-end with curl and `decodeChunk` is unit-tested including the
-  split-chunk case, but the React rendering is unverified — the Chrome extension
-  could not inject into `localhost`.
 - **The `unknown` signal path is untested against live data**, because no signal
-  is currently `unknown`. The instruction is tested; the behaviour is not.
-- **Dev ran on a work Anthropic key**, a deliberate time-boxed exception to the
-  line `docs/adr/0005` draws. Cut over to the personal key before real use.
+  was `unknown` at the time of writing. The instruction is tested and the tool
+  passes status through verbatim; the end-to-end behaviour is not. Worth
+  re-running the sleep and coverage probes next time a signal goes `unknown`.
+
+Closed since first writing:
+
+- ~~The `/ask` UI has not been eyeballed in a browser.~~ Verified in local dev and
+  then in production: streaming renders, the status line tracks tool calls, no
+  empty bubble is left behind.
+- ~~Dev ran on a work Anthropic key.~~ Production now runs a personal key, per
+  `docs/adr/0005`. Note a local `.env` may still hold the work key — check before
+  a long `npm run dev` session, since a turn costs roughly 4c.
 
 ## Deferred
 
