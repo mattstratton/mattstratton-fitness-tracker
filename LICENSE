@@ -1,12 +1,3 @@
-MIT License below applies to the SOURCE CODE in this repository.
-
-The prose — this repository's Markdown files, including `docs/` (notably
-`docs/migration-log.md` and the ADRs), `README.md`, `CLAUDE.md`, `CONTEXT.md`,
-and the strategy/tactics notes — is licensed separately under Creative Commons
-Attribution 4.0 International. See `LICENSE-docs`.
-
------------------------------------------------------------------------
-
 MIT License
 
 Copyright (c) 2026 Matt Stratton
