@@ -24,9 +24,9 @@ is a no-op on a fresh install.
 
 ## The person
 
-Matty. Lifter on **GZCLP: Blacknoir version** in Liftosaur (program `viohtrec`),
-home garage gym. Cutting on a GLP-1 — see `nutrition-strategy.md` for the settled
-decisions (1660 kcal / 198g protein, 10am–8pm window) and don't re-litigate them.
+Matty. Lifter on **GZCLP** in Liftosaur (program `bbbqqwwa`), home garage gym.
+Cutting on a GLP-1 — see `nutrition-strategy.md` for the settled decisions
+(1660 kcal / 198g protein, 10am–8pm window) and don't re-litigate them.
 
 ## Vocabulary
 
