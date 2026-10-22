@@ -1114,3 +1114,30 @@ checks that feel like enough do not cover test files at all. The fix was to narr
 once in `lib/coach/tools.ts` (`COACH_TOOL_SPECS`) rather than cast at each use, so
 the tests keep asserting on descriptions — which is where several of the trap
 warnings live.
+
+## Dependency audit 2026-10-22: the lockfile was behind the manifest, and `next` was in the critical range
+
+`package.json` said `next@^16.2.12`, which reads as "current". The lockfile had
+pinned **16.3.0**, which `npm audit` put in the 16.0.0–16.4.0 advisory range
+(critical: unauthenticated RCE via the image optimizer and `use cache`, plus
+cache-poisoning and SSRF items). A caret range does nothing for an existing
+lockfile — it only bounds what a *fresh* resolve may pick, so the floor in
+`package.json` was the wrong number to be reassured by. Vercel installs from the
+lockfile, so the fix does not exist in production until the lockfile is
+committed. `npm ls next` is the check that tells the truth.
+
+Also flagged: `sharp` (via `next`, high) and `source-map-js` (via `postcss`, high).
+Both transitive, both cleared by `npm update`; neither is directly imported.
+
+Fixed by `npm update`, then raising the floors in `package.json` so a clean
+install cannot resolve backwards. Result: `next 16.4.2`, `react/react-dom 19.3.1`,
+`pg 8.23.1`, `tsx 4.23.15`; `npm audit` reports 0. Measured by `npm audit` and
+`npm ls` on 2026-10-22. `typecheck`, 193 tests and `next build` pass.
+
+Left alone on purpose: `@types/node` stays on 22 (matches `engines`; the 26 types
+would admit APIs the runtime may lack), `typescript` stays on 5.x (7.x is a
+different compiler, no advisory), `next-auth` stays on the v5 beta (npm's "latest"
+tag is v4, a downgrade). `@anthropic-ai/sdk` is held at 0.116: 1.1.0 passes
+typecheck and tests, but neither touches the live beta streaming path in
+`/api/coach`, and it has no advisory behind it. It sits on branch `sdk-1x` until
+`npm run probe-coach` has run against it.
